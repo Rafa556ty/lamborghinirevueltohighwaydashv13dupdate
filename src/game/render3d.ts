@@ -984,12 +984,19 @@ export class Scene3D {
 
   /** Mustang GT interceptor: black-and-white livery, light bar, POLÍCIA doors. */
   private setupPolice(car: THREE.Group) {
+    car.updateMatrixWorld(true);
+    const size = new THREE.Vector3();
     car.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
+      // Body shell = the big panels that span the car; repaint them gloss black.
+      new THREE.Box3().setFromObject(m).getSize(size);
+      const isShell = size.x > 1.5 && size.z > 3;
       const swap = (mat: THREE.Material) => {
-        if (mat.name !== "Body") return mat;
+        const n = mat.name.toLowerCase();
+        if (!(n === "body" || (isShell && n.startsWith("palette")))) return mat;
         const c = (mat as THREE.MeshStandardMaterial).clone();
+        c.map = null;
         c.color.set(0x08090b);
         c.metalness = 0.75;
         c.roughness = 0.2;
