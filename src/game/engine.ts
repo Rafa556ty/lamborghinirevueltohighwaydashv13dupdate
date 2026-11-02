@@ -736,7 +736,7 @@ export class RacingEngine {
             this.lastNearMissEvent = { combo: this.nearMissCombo, pts };
             this.nearMissEventTimer = 2.0;
             this.audio?.playNearMissWhoosh();
-            this.audio?.playTrafficHorn();
+            if (Math.random() < 0.6) this.audio?.playTrafficHorn();
             this.cb.onNearMiss?.(this.nearMissCombo, pts);
             const side = t.x > p.x ? 1 : -1;
             for (let k = 0; k < 6; k++) {
