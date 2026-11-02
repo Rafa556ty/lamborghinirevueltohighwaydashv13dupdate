@@ -994,7 +994,7 @@ export class Scene3D {
       const isShell = size.x > 1.5 && size.z > 3;
       const swap = (mat: THREE.Material) => {
         const n = mat.name.toLowerCase();
-        if (!(n === "body" || (isShell && n.startsWith("palette")))) return mat;
+        if (!(n === "body" || n.startsWith("palette") || (isShell && n.startsWith("fordm_grille")))) return mat;
         const c = (mat as THREE.MeshStandardMaterial).clone();
         c.map = null;
         c.color.set(0x08090b);
