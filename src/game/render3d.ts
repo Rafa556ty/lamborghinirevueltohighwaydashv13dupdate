@@ -1111,7 +1111,7 @@ export class Scene3D {
         this.engineBrakeLight.visible = isBraking;
       }
       for (const m of this.playerBrakeOnly) {
-        m.emissiveIntensity = isBraking ? 2.6 : 0;
+        m.emissiveIntensity = isBraking ? 4 : 0;
       }
       if (import.meta.env.DEV)
         this.canvas.dataset["tail"] = this.playerTail
