@@ -512,6 +512,7 @@ export class RacingEngine {
   private update(dt: number) {
     if (this.paused) {
       this.audio?.setEngine(0, false, false);
+      this.audio?.setPolice(999, false);
       this.audio?.setTireScreech(0);
       return;
     }
@@ -699,6 +700,9 @@ export class RacingEngine {
     // Police Pursuit Update
     if (this.mode === "police" && (this.phase === "playing" || this.phase === "busted")) {
       this.updatePolice(dt);
+    } else {
+      // Game over, menu or normal mode: the siren must never keep playing
+      this.audio?.setPolice(999, false);
     }
 
     // Near Miss combo timer & detection
