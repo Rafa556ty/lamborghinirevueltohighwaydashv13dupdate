@@ -16,14 +16,16 @@ describe("requested traffic and aero rules", () => {
   it("never selects consecutive Mustangs", () =>
     expect(pickTrafficType(0, 0, "mustang-blue")).toBe("hatch"));
   it("selects a white-bus class and all ordinary vehicle types", () => {
-    expect([0, 0.2, 0.4, 0.6, 0.8].map((n) => pickTrafficType(0.99, n))).toEqual([
+    expect([0, 0.17, 0.34, 0.51, 0.68, 0.85].map((n) => pickTrafficType(0.99, n))).toEqual([
       "hatch",
       "sedan",
       "suv",
       "pickup",
       "bus",
+      "truck",
     ]);
-    expect(FOOTPRINTS.bus).toEqual([2.5, 10.8]);
+    expect(FOOTPRINTS.bus).toEqual([2.55, 12]);
+    expect(FOOTPRINTS.truck).toEqual([2.55, 19.8]);
   });
   it("spawns in world position beyond the drawn horizon and retains distant traffic", () => {
     expect(trafficScreenY(500, 300, 10, 20)).toBe(-5300);

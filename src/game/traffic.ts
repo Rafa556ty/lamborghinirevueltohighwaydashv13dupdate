@@ -1,7 +1,15 @@
 // Traffic rules that keep the road passable and handle realistic maneuvers.
 
 export type CarType =
-  "bus" | "suv" | "sedan" | "hatch" | "pickup" | "m5" | "mustang-blue" | "mustang-black";
+  | "bus"
+  | "truck"
+  | "suv"
+  | "sedan"
+  | "hatch"
+  | "pickup"
+  | "m5"
+  | "mustang-blue"
+  | "mustang-black";
 
 export type YieldState = "idle" | "accelerating" | "changing";
 
