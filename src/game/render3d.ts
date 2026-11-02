@@ -778,14 +778,17 @@ export class Scene3D {
           const c = (mat as THREE.MeshStandardMaterial).clone();
           c.emissive = new THREE.Color(0xff0600);
           c.emissiveIntensity = 0;
+          c.toneMapped = false;
           if (Array.isArray(m.material)) m.material[i] = c;
           else m.material = c;
           this.playerBrakeOnly.push(c);
         } else if (name.startsWith("tail") || name === "taillight_rear" || name === "taillight_glass") {
           // Signature Y-shaped running taillights
           const c = (mat as THREE.MeshStandardMaterial).clone();
-          c.emissive = new THREE.Color(0xff0806);
+          // Pure red like the reference photo; tone mapping turned it orange.
+          c.emissive = new THREE.Color(0xff0a02);
           c.emissiveIntensity = 0.8;
+          c.toneMapped = false;
           if (Array.isArray(m.material)) m.material[i] = c;
           else m.material = c;
           this.playerTail.push(c);
@@ -822,6 +825,7 @@ export class Scene3D {
       color: 0xff1505,
       transparent: true,
       opacity: 0.98,
+      toneMapped: false,
     });
     const brakeMesh = new THREE.Mesh(brakeGeo, brakeMat);
     brakeMesh.name = "engine-cowl-brake-strip";
@@ -1107,10 +1111,10 @@ export class Scene3D {
         this.engineBrakeLight.visible = isBraking;
       }
       for (const m of this.playerBrakeOnly) {
-        m.emissiveIntensity = isBraking ? 5.2 : 0;
+        m.emissiveIntensity = isBraking ? 2.6 : 0;
       }
       for (const m of this.playerTail) {
-        m.emissiveIntensity = isBraking ? 6.0 : lights ? 4.5 : 0.35;
+        m.emissiveIntensity = isBraking ? 2.6 : lights ? 1.5 : 0.2;
       }
       for (const m of this.playerHead) {
         m.emissiveIntensity = lights ? 3.8 : 0.6;
