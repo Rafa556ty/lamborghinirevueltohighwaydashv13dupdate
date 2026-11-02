@@ -919,11 +919,14 @@ export class RacingEngine {
         // Roadblock done: the police car brakes to a stop in front, no crash
         pol.speed = Math.max(0, pol.speed - 150 * dt);
         pol.lane = pLane;
+        // Auto-brake: the Lamborghini stops behind the police car's bumper
+        const room = pol.z - this.pz - this.lenM * 1.15;
+        if (room < this.lenM * 2) this.player.speed = Math.min(this.player.speed, pol.speed + Math.max(0, room) * 6);
         this.player.spin = 0;
         this.player.rot *= Math.exp(-4 * dt);
       } else {
         // Close enough: go for a rolling roadblock (overtake beside, cut in, brake)
-        if (!pol.blocking && gapNow < this.lenM * 2.2) {
+        if (!pol.blocking && gapNow < this.lenM * 6) {
           pol.blocking = true;
           const side =
             pLane === 0
@@ -937,12 +940,20 @@ export class RacingEngine {
         }
         if (pol.blocking) {
           const ahead = pol.z - this.pz;
-          if (ahead < this.lenM * 1.4) {
-            // Pull alongside in the free lane and overtake
+          // Side-by-side clearance: the police only moves past once it's fully in another lane
+          const clear = Math.abs(pol.x - this.player.x) > this.carW * 1.1;
+          if (ahead < this.lenM * 1.7) {
+            // Pull out into the free lane first, then overtake alongside
+            if (pol.passLane === pLane) pol.passLane = pLane === 0 ? 1 : pLane - 1;
             pol.lane = pol.passLane;
-            pol.speed = Math.min(340, Math.max(pol.speed, ps + 45));
+            if (clear) pol.speed = Math.min(340, Math.max(pol.speed, ps + 45));
+            else if (ahead < 0) {
+              // still behind in our lane: never drive into the Lamborghini
+              const room = -ahead - this.lenM * 1.25;
+              pol.speed = room < this.lenM ? Math.min(pol.speed, ps + Math.max(-20, room * 4)) : pol.speed;
+            }
           } else {
-            // In front: cut into the player's lane and brake hard
+            // Fully in front: cut into the player's lane and brake hard
             pol.lane = pLane;
             pol.speed = Math.max(0, Math.min(pol.speed, ps) - 110 * dt);
           }
@@ -983,7 +994,7 @@ export class RacingEngine {
       // Busted: police blocked the road right in front of the Lamborghini
       else if (
         pol.blocking &&
-        -gap > 0 &&
+        -gap > this.lenM * 1.1 &&
         -gap < this.lenM * 3 &&
         Math.abs(pol.x - this.player.x) < this.carW * 0.8
       ) {
