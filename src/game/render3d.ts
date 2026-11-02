@@ -8,8 +8,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { RenderSnapshot } from "./engine";
 import type { CarType } from "./traffic";
 import { loadCar, type ModelKey } from "./models3d";
-import { createTrafficModel, type TrafficModelKey } from "./traffic-models";
-import { TRAFFIC_DRAW_AHEAD } from "./traffic-rules";
+import { FOOTPRINTS, TRAFFIC_DRAW_AHEAD } from "./traffic-rules";
 import { stepAero, type AeroState } from "./aero";
 import { AdaptiveResolution, phoneProfile } from "./quality";
 import {
@@ -35,16 +34,26 @@ const VIEW_BEHIND = 30;
 const TILE_LEN = 24; // metres of road per texture tile
 const STRIP_LEN = VIEW_AHEAD + VIEW_BEHIND;
 
-type TrafficKey = ModelKey | TrafficModelKey;
+type TrafficKey = ModelKey;
 const TYPE_MODEL: Record<CarType, TrafficKey> = {
-  m5: "fox",
+  m5: "hatch",
   "mustang-blue": "mustang",
   "mustang-black": "mustang",
   bus: "bus",
+  truck: "truck",
   suv: "suv",
   sedan: "sedan",
-  hatch: "fox",
+  hatch: "hatch",
   pickup: "pickup",
+};
+const MODEL_FOOTPRINT: Partial<Record<TrafficKey, [number, number]>> = {
+  hatch: FOOTPRINTS.hatch,
+  sedan: FOOTPRINTS.sedan,
+  suv: FOOTPRINTS.suv,
+  pickup: FOOTPRINTS.pickup,
+  bus: FOOTPRINTS.bus,
+  truck: FOOTPRINTS.truck,
+  mustang: FOOTPRINTS["mustang-blue"],
 };
 
 const hash = (n: number) => {
@@ -742,12 +751,7 @@ export class Scene3D {
       return null;
     });
     if (player) this.setupPlayer(player.clone(true));
-    for (const key of ["fox", "sedan", "suv", "pickup", "bus"] as TrafficModelKey[]) {
-      const template = createTrafficModel(key);
-      this.templates.set(key, template);
-      this.setupTrafficBatch(key, template);
-    }
-    const keys: ModelKey[] = ["mustang"];
+    const keys: ModelKey[] = ["hatch", "sedan", "suv", "pickup", "bus", "truck", "mustang"];
     await Promise.all(
       keys.map((k) =>
         loadCar(k)
@@ -987,8 +991,9 @@ export class Scene3D {
       this.scene.add(mesh);
       parts.push(mesh);
     });
+    const [fw, fl] = MODEL_FOOTPRINT[key] ?? [2, 4.6];
     const shadow = new THREE.InstancedMesh(
-      new THREE.PlaneGeometry(key === "bus" ? 2.5 : 2, key === "bus" ? 10.8 : 4.6)
+      new THREE.PlaneGeometry(fw + 0.15, fl + 0.2)
         .rotateX(-Math.PI / 2)
         .translate(0, 0.018, 0),
       new THREE.MeshBasicMaterial({
@@ -1155,7 +1160,12 @@ export class Scene3D {
         this.matrix.compose(this.positionVector, this.quaternion, this.scaleVector);
         for (const part of parts) part.setMatrixAt(count, this.matrix);
         if (indicators && car.signal !== 0 && Math.floor(car.signalTimer * 2.6) % 2 === 0) {
-          this.positionVector.set(toX(car.x) + car.signal * 0.8, 0.78, z + 2.38);
+          const [cw, cl] = FOOTPRINTS[car.type];
+          this.positionVector.set(
+            toX(car.x) + car.signal * (cw / 2 - 0.12),
+            car.type === "bus" || car.type === "truck" ? 1.1 : 0.82,
+            z + cl / 2 + 0.03,
+          );
           this.matrix.compose(this.positionVector, this.quaternion, this.scaleVector);
           indicators.setMatrixAt(signalCount++, this.matrix);
         }

@@ -1226,6 +1226,7 @@ export class RacingEngine {
           { type: "suv", img: this.images.suv, minSpeed: 90, maxSpeed: 130 },
           { type: "pickup", img: this.images.pickup, minSpeed: 85, maxSpeed: 120 },
           { type: "bus", img: this.images.bus, minSpeed: 72, maxSpeed: 92, preferredLane: 2 },
+          { type: "truck", img: this.images.bus, minSpeed: 70, maxSpeed: 88, preferredLane: 2 },
           { type: "mustang-blue", img: this.images.mustangBlue, minSpeed: 100, maxSpeed: 160 },
           { type: "mustang-black", img: this.images.mustangBlack, minSpeed: 100, maxSpeed: 160 },
         ]
