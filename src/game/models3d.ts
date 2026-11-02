@@ -13,7 +13,8 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import revueltoAsset from "@/assets/models/revuelto.glb.asset.json";
 import mustangAsset from "@/assets/models/mustang-gt-traffic.glb.asset.json";
 
-export type ModelKey = "revuelto" | "mustang";
+export type TrafficModelKey = "hatch" | "sedan" | "suv" | "pickup" | "bus" | "truck";
+export type ModelKey = "revuelto" | "mustang" | TrafficModelKey;
 
 type ModelSpec = {
   url: string;
@@ -21,10 +22,91 @@ type ModelSpec = {
   /** extra yaw (radians) when the file's nose isn't detected */ yaw: number;
 };
 
+// Realistic CC0 traffic (tevy.dev), textures stripped + meshopt for phones.
+// Their noses point +Z, so they are turned around explicitly.
 export const MODEL_SPECS: Record<ModelKey, ModelSpec> = {
   revuelto: { url: revueltoAsset.url, length: 4.95, yaw: 0 },
   mustang: { url: mustangAsset.url, length: 4.8, yaw: 0 },
+  hatch: { url: "/game-assets/traffic-hatch.glb", length: 4.1, yaw: Math.PI },
+  sedan: { url: "/game-assets/traffic-sedan.glb", length: 4.7, yaw: Math.PI },
+  suv: { url: "/game-assets/traffic-suv.glb", length: 4.65, yaw: Math.PI },
+  pickup: { url: "/game-assets/traffic-pickup.glb", length: 5.3, yaw: Math.PI },
+  bus: { url: "/game-assets/traffic-bus.glb", length: 12, yaw: Math.PI },
+  truck: { url: "/game-assets/traffic-truck.glb", length: 19.8, yaw: Math.PI },
 };
+
+/** Real-world factory paint per traffic model. */
+const TRAFFIC_PAINT: Record<TrafficModelKey, number> = {
+  hatch: 0x8a1414, // solid red
+  sedan: 0x4a5a6c, // grey-blue metallic
+  suv: 0xd8dadd, // pearl silver
+  pickup: 0xf1f1ee, // fleet white
+  bus: 0xf2f2f0, // city white
+  truck: 0x1d3f7a, // deep blue tractor
+};
+
+/**
+ * Collapse the many small source materials into a few shared PBR finishes:
+ * realistic look, and ~7 draws per vehicle type on the Galaxy A11.
+ */
+function styleTraffic(root: THREE.Object3D, key: TrafficModelKey) {
+  const make = (p: THREE.MeshStandardMaterialParameters, name: string) => {
+    const m = new THREE.MeshStandardMaterial(p);
+    m.name = name;
+    return m;
+  };
+  const mats = {
+    paint: make({ color: TRAFFIC_PAINT[key], metalness: 0.55, roughness: 0.28 }, "paint"),
+    roof: make({ color: 0xf4f4f2, metalness: 0.3, roughness: 0.4 }, "roof"),
+    glass: make({ color: 0x0b1116, metalness: 0.9, roughness: 0.06 }, "glass"),
+    trim: make({ color: 0x141518, metalness: 0.2, roughness: 0.62 }, "trim"),
+    chrome: make({ color: 0xc9ced3, metalness: 1, roughness: 0.16 }, "chrome"),
+    rubber: make({ color: 0x101012, metalness: 0, roughness: 0.92 }, "tire"),
+    head: make(
+      { color: 0xf4f6ff, emissive: 0xffffff, emissiveIntensity: 1.6, roughness: 0.2 },
+      "light_front",
+    ),
+    tail: make(
+      { color: 0x5a0303, emissive: 0xff1006, emissiveIntensity: 1.8, roughness: 0.25 },
+      "light_rear",
+    ),
+    amber: make(
+      { color: 0x7a4200, emissive: 0xff9000, emissiveIntensity: 1.2, roughness: 0.25 },
+      "lamp_amber",
+    ),
+  };
+  const pick = (name: string, old: THREE.Material): THREE.Material => {
+    const n = name.toLowerCase();
+    if (n.startsWith("roof_paint")) return mats.roof;
+    if (n.startsWith("paint")) return mats.paint;
+    if (n.includes("glass") || n.includes("screen") || n === "mirror") return mats.glass;
+    if (n.startsWith("light_front")) return mats.head;
+    if (n.startsWith("lamp_red") || n.startsWith("light_rear") || n === "red") return mats.tail;
+    if (n.startsWith("lamp_amber") || n === "beacon") return mats.amber;
+    if (n === "tire" || n === "tyre") return mats.rubber;
+    if (n.includes("machined") || n === "chrome" || n === "rim" || n === "pole") return mats.chrome;
+    if (n === "lamp") return mats.head;
+    // Semi tractor body keeps its own tone, just with a showroom finish.
+    if (n.startsWith("semi-truck_body")) {
+      const std = old as THREE.MeshStandardMaterial;
+      std.color?.setHex(TRAFFIC_PAINT.truck);
+      std.map = null;
+      std.metalness = 0.5;
+      std.roughness = 0.3;
+      return std;
+    }
+    return mats.trim;
+  };
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.material = Array.isArray(m.material)
+      ? m.material.map((x) => pick(x.name, x))
+      : pick(m.material.name, m.material);
+  });
+}
+
+const TRAFFIC_KEYS = new Set<ModelKey>(["hatch", "sedan", "suv", "pickup", "bus", "truck"]);
 
 /** Revuelto body paint: the user wants it black, nothing else changed. */
 export const REVUELTO_PAINT = 0x060607;
@@ -257,6 +339,7 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
       .then(parseGlb)
       .then((scene) => {
         if (key === "revuelto") paintRevuelto(scene);
+        if (TRAFFIC_KEYS.has(key)) styleTraffic(scene, key as TrafficModelKey);
         if (key === "mustang") {
           scene.traverse((o) => {
             const m = o as THREE.Mesh;
