@@ -119,11 +119,14 @@ function trailerMaterial(geo: THREE.BufferGeometry) {
   const bb = geo.boundingBox!;
   const pos = geo.getAttribute("position");
   const uv = new Float32Array(pos.count * 2);
+  const nrm = geo.getAttribute("normal");
   const sx = bb.max.x - bb.min.x || 1;
   const sy = bb.max.y - bb.min.y || 1;
   const sz = bb.max.z - bb.min.z || 1;
   for (let i = 0; i < pos.count; i++) {
-    uv[i * 2] = sz > sx ? (pos.getZ(i) - bb.min.z) / sz : (pos.getX(i) - bb.min.x) / sx;
+    const u = sz > sx ? (pos.getZ(i) - bb.min.z) / sz : (pos.getX(i) - bb.min.x) / sx;
+    // mirror the left flank so the lettering reads correctly on both sides
+    uv[i * 2] = nrm && nrm.getX(i) < 0 ? 1 - u : u;
     uv[i * 2 + 1] = (pos.getY(i) - bb.min.y) / sy;
   }
   geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
