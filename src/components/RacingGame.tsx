@@ -252,6 +252,7 @@ export function RacingGame() {
             },
             sim: (seconds: number) => engine.debugSim(seconds),
             input: engine.input,
+            engine,
             setZ: (z: number) => {
               (engine as unknown as { pz: number }).pz = z;
             },
