@@ -1012,14 +1012,15 @@ export class RacingEngine {
     const pLane = clamp(Math.floor((p.x - this.roadX) / this.laneW), 0, LANES - 1);
 
     // Only the single car directly ahead of the player (same path, close) yields.
-    let t: (typeof this.traffic)[number] | undefined;
+    let nearest: (typeof this.traffic)[number] | undefined;
     for (const c of this.traffic) {
       if (c.hit) continue;
       const dz = c.z - this.pz;
       if (dz <= 4 || dz >= 70) continue;
       if (Math.abs(c.x - p.x) >= this.laneW * 0.6) continue;
-      if (!t || dz < t.z - this.pz) t = c;
+      if (!nearest || dz < nearest.z - this.pz) nearest = c;
     }
+    const t = nearest;
     {
       if (t) {
         const inPath = true;

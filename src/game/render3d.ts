@@ -823,13 +823,33 @@ export class Scene3D {
     car.add(brakeMesh);
     this.engineBrakeLight = brakeMesh;
 
-    const tips = exhausts.length
-      ? exhausts
-      : [
-          new THREE.Vector3(-0.22, 0.78, 2.45),
-          new THREE.Vector3(0, 0.78, 2.45),
-          new THREE.Vector3(0.22, 0.78, 2.45),
-        ];
+    // The batched car merges both exhaust pipes into one mesh, so split its
+    // vertices by side: one flame per real outlet (Revuelto has twin pipes).
+    const tips: THREE.Vector3[] = [];
+    car.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || tips.length) return;
+      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+      if ((mat?.name || "").toLowerCase() !== "exhaust") return;
+      const pos = m.geometry.getAttribute("position");
+      const v = new THREE.Vector3();
+      const side = [new THREE.Box3(), new THREE.Box3()];
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+        side[v.x < 0 ? 0 : 1]!.expandByPoint(v);
+      }
+      for (const b of side) {
+        if (b.isEmpty()) continue;
+        const c = b.getCenter(new THREE.Vector3());
+        c.z = b.max.z;
+        tips.push(c);
+      }
+    });
+    if (tips.length !== 2) {
+      tips.length = 0;
+      tips.push(new THREE.Vector3(-0.14, 0.78, 2.45), new THREE.Vector3(0.14, 0.78, 2.45));
+    }
+    void exhausts;
     for (const tip of tips) this.flames.push(this.makeFlame(car, tip));
     this.headL.position.set(-0.7, 0.75, -2.2);
     this.headR.position.set(0.7, 0.75, -2.2);
@@ -1081,7 +1101,7 @@ export class Scene3D {
         m.emissiveIntensity = isBraking ? 5.2 : 0;
       }
       for (const m of this.playerTail) {
-        m.emissiveIntensity = isBraking ? 5.0 : lights ? 2.8 : 0.7;
+        m.emissiveIntensity = isBraking ? 6.0 : lights ? 4.5 : 0.35;
       }
       for (const m of this.playerHead) {
         m.emissiveIntensity = lights ? 3.8 : 0.6;
