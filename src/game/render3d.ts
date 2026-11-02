@@ -278,6 +278,8 @@ export class Scene3D {
   private playerHead: THREE.MeshStandardMaterial[] = [];
   private playerBrakeOnly: THREE.MeshStandardMaterial[] = [];
   private engineBrakeLight: THREE.Mesh | null = null;
+  private rimWarm = new THREE.DirectionalLight(0xffb347, 1.5);
+  private rimCool = new THREE.DirectionalLight(0x7fb2ff, 0.8);
   private roadBeamMesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null;
   private headL: THREE.SpotLight;
   private headR: THREE.SpotLight;
@@ -355,6 +357,10 @@ export class Scene3D {
 
     this.hemi = new THREE.HemisphereLight(0xdfeeff, 0x3b4a2a, 0.9);
     this.scene.add(this.hemi);
+    // Garage-style warm/cool rim lights: gives the paint the studio reflections.
+    this.rimWarm.position.set(-6, 3, -5);
+    this.rimCool.position.set(5, 2, -6);
+    this.scene.add(this.rimWarm, this.rimCool);
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(1024, 1024);
@@ -772,14 +778,17 @@ export class Scene3D {
           const c = (mat as THREE.MeshStandardMaterial).clone();
           c.emissive = new THREE.Color(0xff0600);
           c.emissiveIntensity = 0;
+          c.toneMapped = false;
           if (Array.isArray(m.material)) m.material[i] = c;
           else m.material = c;
           this.playerBrakeOnly.push(c);
         } else if (name.startsWith("tail") || name === "taillight_rear" || name === "taillight_glass") {
           // Signature Y-shaped running taillights
           const c = (mat as THREE.MeshStandardMaterial).clone();
-          c.emissive = new THREE.Color(0xff0806);
+          // Pure red like the reference photo; tone mapping turned it orange.
+          c.emissive = new THREE.Color(0xff0a02);
           c.emissiveIntensity = 0.8;
+          c.toneMapped = false;
           if (Array.isArray(m.material)) m.material[i] = c;
           else m.material = c;
           this.playerTail.push(c);
@@ -816,6 +825,7 @@ export class Scene3D {
       color: 0xff1505,
       transparent: true,
       opacity: 0.98,
+      toneMapped: false,
     });
     const brakeMesh = new THREE.Mesh(brakeGeo, brakeMat);
     brakeMesh.name = "engine-cowl-brake-strip";
@@ -823,13 +833,33 @@ export class Scene3D {
     car.add(brakeMesh);
     this.engineBrakeLight = brakeMesh;
 
-    const tips = exhausts.length
-      ? exhausts
-      : [
-          new THREE.Vector3(-0.22, 0.78, 2.45),
-          new THREE.Vector3(0, 0.78, 2.45),
-          new THREE.Vector3(0.22, 0.78, 2.45),
-        ];
+    // The batched car merges both exhaust pipes into one mesh, so split its
+    // vertices by side: one flame per real outlet (Revuelto has twin pipes).
+    const tips: THREE.Vector3[] = [];
+    car.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || tips.length) return;
+      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+      if ((mat?.name || "").toLowerCase() !== "exhaust") return;
+      const pos = m.geometry.getAttribute("position");
+      const v = new THREE.Vector3();
+      const side = [new THREE.Box3(), new THREE.Box3()];
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+        side[v.x < 0 ? 0 : 1]!.expandByPoint(v);
+      }
+      for (const b of side) {
+        if (b.isEmpty()) continue;
+        const c = b.getCenter(new THREE.Vector3());
+        c.z = b.max.z;
+        tips.push(c);
+      }
+    });
+    if (tips.length !== 2) {
+      tips.length = 0;
+      tips.push(new THREE.Vector3(-0.14, 0.78, 2.45), new THREE.Vector3(0.14, 0.78, 2.45));
+    }
+    void exhausts;
     for (const tip of tips) this.flames.push(this.makeFlame(car, tip));
     this.headL.position.set(-0.7, 0.75, -2.2);
     this.headR.position.set(0.7, 0.75, -2.2);
@@ -1033,6 +1063,9 @@ export class Scene3D {
     this.sun.intensity = lerp(2.9, 0.04, night) * (1 - rain * 0.6) * (1 - tunnelBlend);
     this.hemi.intensity = lerp(0.95, 0.38, night) * (1 - rain * 0.2) * lerp(1, 0.65, tunnelBlend);
     this.scene.environmentIntensity = lerp(1.15, 0.18, night) * lerp(1, 0.35, tunnelBlend);
+    const rimK = lerp(1, 0.3, Math.max(night, tunnelBlend));
+    this.rimWarm.intensity = 1.5 * rimK;
+    this.rimCool.intensity = 0.8 * rimK;
     this.roadMat.roughness = lerp(0.88, 0.25, rain);
     this.roadMat.color.setScalar(lerp(1, 0.55, rain));
     this.tunnelLamp.intensity = tunnel ? 28 + Math.sin(((pz % 8) / 8) * Math.PI * 2) * 10 : 0;
@@ -1078,10 +1111,14 @@ export class Scene3D {
         this.engineBrakeLight.visible = isBraking;
       }
       for (const m of this.playerBrakeOnly) {
-        m.emissiveIntensity = isBraking ? 5.2 : 0;
+        m.emissiveIntensity = isBraking ? 4 : 0;
       }
+      if (import.meta.env.DEV)
+        this.canvas.dataset["tail"] = this.playerTail
+          .map((m) => `${m.name}:${m.emissive.getHexString()}:${m.emissiveIntensity}:${m.toneMapped}`)
+          .join("|") + `|brake=${isBraking}|lights=${lights}`;
       for (const m of this.playerTail) {
-        m.emissiveIntensity = isBraking ? 5.0 : lights ? 2.8 : 0.7;
+        m.emissiveIntensity = isBraking ? 2.6 : lights ? 1.5 : 0.2;
       }
       for (const m of this.playerHead) {
         m.emissiveIntensity = lights ? 3.8 : 0.6;
