@@ -897,38 +897,43 @@ export class GameAudio {
   }
 
   /** Quick surprised horn beep from traffic car overtaken in a near miss */
+  /** Near miss: the startled driver leans on the horn (one long or two short honks), falling behind. */
   playTrafficHorn() {
     const ctx = this.ctx;
     if (!ctx || !this.master) return;
-    const t = ctx.currentTime;
+    const t = ctx.currentTime + 0.05;
+    const base = rnd(330, 420); // car horns: two detuned tones about a major third apart
+    const honks: [number, number][] =
+      Math.random() < 0.5 ? [[0, rnd(0.45, 0.7)]] : [[0, 0.16], [0.24, rnd(0.35, 0.5)]];
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = rnd(-0.6, 0.6);
+    const body = ctx.createBiquadFilter();
+    body.type = "bandpass";
+    body.frequency.value = base * 2.2;
+    body.Q.value = 1.1;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.28, t + 0.02);
-    g.gain.setValueAtTime(0.28, t + 0.16);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
-
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.value = rnd(420, 560);
-    bp.Q.value = 1.8;
-
-    const o1 = ctx.createOscillator();
-    o1.type = "sawtooth";
-    o1.frequency.value = 440;
-
-    const o2 = ctx.createOscillator();
-    o2.type = "sawtooth";
-    o2.frequency.value = 554;
-
-    o1.connect(bp);
-    o2.connect(bp);
-    bp.connect(g);
-    g.connect(this.master);
-
-    o1.start(t);
-    o2.start(t);
-    o1.stop(t + 0.29);
-    o2.stop(t + 0.29);
+    g.gain.value = 0;
+    body.connect(g);
+    g.connect(pan);
+    pan.connect(this.master);
+    const end = honks[honks.length - 1]!;
+    const stopAt = t + end[0] + end[1] + 0.1;
+    for (const f of [base, base * 1.26]) {
+      const o = ctx.createOscillator();
+      o.type = "square";
+      o.frequency.setValueAtTime(f, t);
+      // the car drops behind fast: pitch sags slightly (doppler)
+      o.frequency.linearRampToValueAtTime(f * 0.94, stopAt);
+      o.connect(body);
+      o.start(t);
+      o.stop(stopAt);
+    }
+    for (const [at, len] of honks) {
+      g.gain.setValueAtTime(0, t + at);
+      g.gain.linearRampToValueAtTime(0.16, t + at + 0.015);
+      g.gain.setValueAtTime(0.16 * 0.7, t + at + len);
+      g.gain.linearRampToValueAtTime(0, t + at + len + 0.04);
+    }
   }
 
   crash() {
