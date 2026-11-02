@@ -269,6 +269,7 @@ export class RacingEngine {
     vx: 0,
     rot: 0,
     holdT: 0,
+    cutIn: false,
   };
 
   private traffic: TrafficCar[] = [];
@@ -476,6 +477,7 @@ export class RacingEngine {
     this.police.startDelay = START_DELAY;
     this.police.active = this.mode === "police";
     this.police.blocking = false;
+    this.police.cutIn = false;
     this.police.vx = 0;
     this.police.rot = 0;
     this.police.holdT = 0;
@@ -919,11 +921,14 @@ export class RacingEngine {
         // Roadblock done: the police car brakes to a stop in front, no crash
         pol.speed = Math.max(0, pol.speed - 150 * dt);
         pol.lane = pLane;
+        // Auto-brake: the Lamborghini stops behind the police car's bumper
+        const room = pol.z - this.pz - this.lenM * 1.15;
+        if (room < this.lenM * 2) this.player.speed = Math.min(this.player.speed, pol.speed + Math.max(0, room) * 6);
         this.player.spin = 0;
         this.player.rot *= Math.exp(-4 * dt);
       } else {
         // Close enough: go for a rolling roadblock (overtake beside, cut in, brake)
-        if (!pol.blocking && gapNow < this.lenM * 2.2) {
+        if (!pol.blocking && gapNow < this.lenM * 6) {
           pol.blocking = true;
           const side =
             pLane === 0
@@ -937,14 +942,28 @@ export class RacingEngine {
         }
         if (pol.blocking) {
           const ahead = pol.z - this.pz;
-          if (ahead < this.lenM * 1.4) {
-            // Pull alongside in the free lane and overtake
+          // Side-by-side clearance: the police only moves past once it's fully in another lane
+          const clear = Math.abs(pol.x - this.player.x) > this.carW * 1.1;
+          if (ahead > this.lenM * 1.7) pol.cutIn = true;
+          else if (ahead < this.lenM * 1.15) pol.cutIn = false;
+          if (!pol.cutIn) {
+            // Pull out into the free lane first, then overtake alongside
+            if (pol.passLane === pLane) pol.passLane = pLane === 0 ? 1 : pLane - 1;
             pol.lane = pol.passLane;
-            pol.speed = Math.min(340, Math.max(pol.speed, ps + 45));
+            if (clear) pol.speed = Math.min(340, Math.max(pol.speed, ps + 45));
+            else if (ahead < 0) {
+              // still behind in our lane: never drive into the Lamborghini
+              const room = -ahead - this.lenM * 1.25;
+              pol.speed = room < this.lenM ? Math.min(pol.speed, ps + Math.max(-20, room * 4)) : pol.speed;
+            }
           } else {
-            // In front: cut into the player's lane and brake hard
+            // Fully in front: cut into the player's lane and brake hard
             pol.lane = pLane;
-            pol.speed = Math.max(0, Math.min(pol.speed, ps) - 110 * dt);
+            // keep a car-length of room while cutting in, then brake to a stop
+            const lined = Math.abs(pol.x - this.player.x) < this.carW * 0.5;
+            pol.speed = lined
+              ? Math.max(0, Math.min(pol.speed, ps) - 110 * dt)
+              : Math.max(ps + 15, pol.speed - 40 * dt);
           }
           if (Math.abs(pol.x - this.player.x) > this.carW * 0.75) pol.holdT = 0;
           if (gapNow > this.lenM * 6) pol.blocking = false; // player got away
@@ -958,7 +977,7 @@ export class RacingEngine {
       // real time, and the heading follows the actual direction of travel
       // (the car visibly turns into the lane instead of sliding sideways).
       const dx = targetX - pol.x;
-      const maxVx = this.laneW * (0.55 + Math.min(pol.speed, 220) / 260);
+      const maxVx = this.laneW * ((pol.cutIn ? 0.95 : 0.55) + Math.min(pol.speed, 220) / 260);
       const wantVx = clamp(dx * 2.2, -maxVx, maxVx);
       pol.vx += (wantVx - pol.vx) * (1 - Math.exp(-5 * dt));
       pol.x += pol.vx * dt;
@@ -983,9 +1002,9 @@ export class RacingEngine {
       // Busted: police blocked the road right in front of the Lamborghini
       else if (
         pol.blocking &&
-        -gap > 0 &&
+        -gap > this.lenM * 1.1 &&
         -gap < this.lenM * 3 &&
-        Math.abs(pol.x - this.player.x) < this.carW * 0.8
+        Math.abs(pol.x - this.player.x) < this.carW * 0.45
       ) {
         this.phase = "busted";
         this.gameOverOutcome = "busted";
