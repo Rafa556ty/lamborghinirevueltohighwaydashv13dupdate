@@ -1011,13 +1011,18 @@ export class RacingEngine {
     const p = this.player;
     const pLane = clamp(Math.floor((p.x - this.roadX) / this.laneW), 0, LANES - 1);
 
-    for (const t of this.traffic) {
-      if (t.hit) continue;
-      const dz = t.z - this.pz;
-      // Cars ahead of player (between 12m and 160m ahead)
-      if (dz > 12 && dz < 160) {
-        // Car is blocking the player's path or in player's lane
-        const inPath = t.lane === pLane || Math.abs(t.x - p.x) < this.carW * 0.95;
+    // Only the single car directly ahead of the player (same path, close) yields.
+    let t: (typeof this.traffic)[number] | undefined;
+    for (const c of this.traffic) {
+      if (c.hit) continue;
+      const dz = c.z - this.pz;
+      if (dz <= 4 || dz >= 70) continue;
+      if (Math.abs(c.x - p.x) >= this.laneW * 0.6) continue;
+      if (!t || dz < t.z - this.pz) t = c;
+    }
+    {
+      if (t) {
+        const inPath = true;
         if (inPath && t.yieldState !== "changing") {
           t.originalCruise = t.originalCruise ?? t.cruise;
 
@@ -1035,7 +1040,7 @@ export class RacingEngine {
             }
           }
 
-          if (candidates.length === 0) continue;
+          if (candidates.length === 0) return;
 
           // Pick preferred target lane
           const target =

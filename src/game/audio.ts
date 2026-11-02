@@ -808,8 +808,7 @@ export class GameAudio {
 
     this.tireOsc1.connect(this.tireFilter);
     this.tireOsc2.connect(this.tireFilter);
-    this.tireOsc1.start();
-    this.tireOsc2.start();
+    // Oscillators intentionally not started (removed brake "beep").
   }
 
   setTireScreech(intensity: number) {
@@ -839,8 +838,8 @@ export class GameAudio {
       }
 
       // 2. High-frequency asphalt scrub overlay
-      const vol = 0.05 + clamped * 0.25;
-      this.tireGain.gain.setTargetAtTime(vol, t, 0.04);
+      // Synth overlay muted: it sounded like a "beep"; only the real skid plays.
+      this.tireGain.gain.setTargetAtTime(0, t, 0.04);
       this.tireFilter.frequency.setTargetAtTime(820 + clamped * 350, t, 0.05);
     } else {
       if (this.skidGain) this.skidGain.gain.setTargetAtTime(0, t, 0.06);

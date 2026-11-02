@@ -9,7 +9,8 @@ import { isolateActiveWing } from "./active-wing";
 export { normalizeCar } from "./normalize-car";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-import revueltoAsset from "@/assets/models/revuelto-mobile.glb.asset.json";
+// Same detailed model the garage shows, so the race car looks identical.
+import revueltoAsset from "@/assets/models/revuelto.glb.asset.json";
 import mustangAsset from "@/assets/models/mustang-gt-traffic.glb.asset.json";
 
 export type ModelKey = "revuelto" | "mustang";
@@ -86,6 +87,22 @@ export function paintRevuelto(root: THREE.Object3D) {
         std.metalness = 0.90;
         std.roughness = 0.16;
         std.map = null;
+        std.needsUpdate = true;
+      } else if (n === "taillight_glass") {
+        // Clear red lens over the Y lights (smoked glass hid them at night)
+        std.color.setHex(0x5a0604);
+        std.metalness = 0.2;
+        std.roughness = 0.1;
+        std.transparent = true;
+        std.opacity = 0.45;
+        std.depthWrite = false;
+        std.needsUpdate = true;
+      } else if (n === "tail_light" || n === "taillight_rear") {
+        // Y-shaped running lights: deep red, glow driven by the race renderer
+        std.color.setHex(0x420202);
+        std.emissive.setHex(0xff0a04);
+        std.emissiveMap = null;
+        std.emissiveIntensity = 0.6;
         std.needsUpdate = true;
       } else if (n.includes("glass") || n.includes("window") || n.includes("windshield")) {
         // Deep smoked supercar privacy glass matching reference garage viewer
