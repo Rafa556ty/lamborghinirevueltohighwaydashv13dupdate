@@ -1113,6 +1113,10 @@ export class Scene3D {
       for (const m of this.playerBrakeOnly) {
         m.emissiveIntensity = isBraking ? 2.6 : 0;
       }
+      if (import.meta.env.DEV)
+        this.canvas.dataset["tail"] = this.playerTail
+          .map((m) => `${m.name}:${m.emissive.getHexString()}:${m.emissiveIntensity}:${m.toneMapped}`)
+          .join("|") + `|brake=${isBraking}|lights=${lights}`;
       for (const m of this.playerTail) {
         m.emissiveIntensity = isBraking ? 2.6 : lights ? 1.5 : 0.2;
       }
