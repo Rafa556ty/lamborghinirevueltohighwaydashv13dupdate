@@ -99,10 +99,79 @@ function styleTraffic(root: THREE.Object3D, key: TrafficModelKey) {
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
+    if (key === "truck" && /trailer_mesh|door_rear/.test(o.name + (o.parent?.name ?? ""))) {
+      m.material = trailerMaterial(m.geometry);
+      return;
+    }
     m.material = Array.isArray(m.material)
       ? m.material.map((x) => pick(x.name, x))
       : pick(m.material.name, m.material);
   });
+}
+
+let trailerMat: THREE.MeshStandardMaterial | null = null;
+/**
+ * Semi-trailer livery: corrugated aluminium box with a freight company graphic.
+ * The source file has no UVs, so the box gets a side projection (u = length, v = height).
+ */
+function trailerMaterial(geo: THREE.BufferGeometry) {
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox!;
+  const pos = geo.getAttribute("position");
+  const uv = new Float32Array(pos.count * 2);
+  const nrm = geo.getAttribute("normal");
+  const sx = bb.max.x - bb.min.x || 1;
+  const sy = bb.max.y - bb.min.y || 1;
+  const sz = bb.max.z - bb.min.z || 1;
+  for (let i = 0; i < pos.count; i++) {
+    const u = sz > sx ? (pos.getZ(i) - bb.min.z) / sz : (pos.getX(i) - bb.min.x) / sx;
+    // mirror the left flank so the lettering reads correctly on both sides
+    uv[i * 2] = nrm && nrm.getX(i) < 0 ? 1 - u : u;
+    uv[i * 2 + 1] = (pos.getY(i) - bb.min.y) / sy;
+  }
+  geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  if (trailerMat) return trailerMat;
+  const cv = document.createElement("canvas");
+  cv.width = 1024;
+  cv.height = 256;
+  const g = cv.getContext("2d")!;
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, "#e9ebec");
+  grad.addColorStop(1, "#c9cdd0");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 1024, 256);
+  // corrugated ribs
+  for (let x = 0; x < 1024; x += 16) {
+    g.fillStyle = "rgba(0,0,0,0.10)";
+    g.fillRect(x, 0, 3, 256);
+    g.fillStyle = "rgba(255,255,255,0.35)";
+    g.fillRect(x + 3, 0, 2, 256);
+  }
+  // rails, livery stripe and lettering
+  g.fillStyle = "#5b6066";
+  g.fillRect(0, 0, 1024, 10);
+  g.fillRect(0, 244, 1024, 12);
+  g.fillStyle = "#c8102e";
+  g.fillRect(0, 168, 1024, 22);
+  g.fillStyle = "#0a2a6b";
+  g.fillRect(0, 192, 1024, 12);
+  g.fillStyle = "#0a2a6b";
+  g.font = "bold 74px Barlow, Arial, sans-serif";
+  g.textBaseline = "middle";
+  g.fillText("RODOLOG", 90, 100);
+  g.fillStyle = "#c8102e";
+  g.font = "600 30px Barlow, Arial, sans-serif";
+  g.fillText("TRANSPORTES & LOGÍSTICA", 96, 146);
+  g.fillText("TRANSPORTES & LOGÍSTICA", 610, 146);
+  g.fillStyle = "#0a2a6b";
+  g.font = "bold 74px Barlow, Arial, sans-serif";
+  g.fillText("RODOLOG", 604, 100);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  trailerMat = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.45, roughness: 0.38 });
+  trailerMat.name = "trailer_livery";
+  return trailerMat;
 }
 
 const TRAFFIC_KEYS = new Set<ModelKey>(["hatch", "sedan", "suv", "pickup", "bus", "truck"]);

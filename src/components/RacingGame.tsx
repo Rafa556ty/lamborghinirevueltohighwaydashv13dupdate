@@ -26,6 +26,7 @@ import {
   Camera,
   Pause,
   Play,
+  ShoppingBag,
 } from "lucide-react";
 
 import revueltoImg from "@/assets/revuelto.png";
@@ -706,7 +707,7 @@ export function RacingGame() {
 
                   <button
                     type="button"
-                    onClick={() => setShowPoliceOff(true)}
+                    onClick={() => setMode("police")}
                     className={cn(
                       "corner-cut flex flex-col items-center justify-center py-2 px-2 border transition-all text-xs font-bold",
                       mode === "police"
@@ -750,6 +751,16 @@ export function RacingGame() {
                 >
                   <Car className="size-3.5 mr-1.5 text-primary" />
                   {t.garage}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-primary/40 bg-hud/80 text-foreground hover:bg-secondary text-xs"
+                  onClick={() => setShowPoliceOff(true)}
+                >
+                  <ShoppingBag className="size-3.5 mr-1.5 text-primary" />
+                  Loja
                 </Button>
 
                 <Button
@@ -1035,11 +1046,11 @@ export function RacingGame() {
         {showPoliceOff && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-scrim px-6">
             <div className="corner-cut w-full max-w-xs border border-hud-border bg-card p-5 text-center">
-              <ShieldAlert className="mx-auto mb-2 size-10 text-destructive" />
-              <h2 className="font-display text-3xl text-foreground">Modo desativado</h2>
+              <ShoppingBag className="mx-auto mb-2 size-10 text-primary" />
+              <h2 className="font-display text-3xl text-foreground">Loja</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                O modo Fuga da Polícia foi desativado temporariamente para deixar o jogo mais leve e
-                rápido no celular. Ele volta em uma próxima atualização.
+                O jogo está na versão DEMO. A loja ainda vai ser implementada nas atualizações
+                futuras.
               </p>
               <Button
                 variant="race"

@@ -298,6 +298,9 @@ export class Scene3D {
   private popT = 0;
 
   private templates = new Map<TrafficKey, THREE.Group>();
+  private policeCar: THREE.Group | null = null;
+  private policeRed: THREE.MeshStandardMaterial | null = null;
+  private policeBlue: THREE.MeshStandardMaterial | null = null;
   private sprites: THREE.Sprite[] = [];
   private smokeTex: THREE.Texture;
   private sparkTex: THREE.Texture;
@@ -758,6 +761,7 @@ export class Scene3D {
           .then((t) => {
             this.templates.set(k, t);
             this.setupTrafficBatch(k, t);
+            if (k === "mustang") this.setupPolice(t.clone(true));
           })
           .catch((e) => console.error(`model ${k} failed`, e)),
       ),
@@ -978,6 +982,86 @@ export class Scene3D {
   private trafficBatches = new Map<TrafficKey, THREE.InstancedMesh[]>();
   private trafficSignals = new Map<TrafficKey, THREE.InstancedMesh>();
 
+  /** Mustang GT interceptor: black-and-white livery, light bar, POLÍCIA doors. */
+  private setupPolice(car: THREE.Group) {
+    car.updateMatrixWorld(true);
+    const size = new THREE.Vector3();
+    car.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      // Body shell = the big panels that span the car; repaint them gloss black.
+      new THREE.Box3().setFromObject(m).getSize(size);
+      const isShell = size.x > 1.5 && size.z > 3;
+      const swap = (mat: THREE.Material) => {
+        const n = mat.name.toLowerCase();
+        if (!(n === "body" || n.startsWith("palette") || (isShell && n.startsWith("fordm_grille")))) return mat;
+        const c = (mat as THREE.MeshStandardMaterial).clone();
+        c.map = null;
+        c.color.set(0x08090b);
+        c.metalness = 0.75;
+        c.roughness = 0.2;
+        return c;
+      };
+      m.material = Array.isArray(m.material) ? m.material.map(swap) : swap(m.material);
+    });
+    const box = new THREE.Box3().setFromObject(car);
+    const roof = box.max.y;
+    const halfW = (box.max.x - box.min.x) / 2;
+    // Door panels: white with "POLÍCIA" lettering (one canvas texture for both sides)
+    const cv = document.createElement("canvas");
+    cv.width = 512;
+    cv.height = 96;
+    const g = cv.getContext("2d")!;
+    g.fillStyle = "#f2f2f0";
+    g.fillRect(0, 0, 512, 96);
+    g.fillStyle = "#0a2a6b";
+    g.fillRect(0, 74, 512, 10);
+    g.fillStyle = "#101114";
+    g.font = "bold 58px Barlow, Arial, sans-serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText("POLÍCIA", 256, 40);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    const doorMat = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.3, roughness: 0.35 });
+    const door = new THREE.PlaneGeometry(2.0, 0.38);
+    for (const side of [-1, 1]) {
+      const d = new THREE.Mesh(door, doorMat);
+      d.position.set(side * (halfW - 0.03), roof * 0.47, 0.05);
+      d.rotation.y = side * (Math.PI / 2);
+      car.add(d);
+    }
+    // Light bar: red (driver side) / blue, flashed from render()
+    this.policeRed = new THREE.MeshStandardMaterial({
+      color: 0x330000,
+      emissive: 0xff1010,
+      emissiveIntensity: 0,
+      toneMapped: false,
+    });
+    this.policeBlue = new THREE.MeshStandardMaterial({
+      color: 0x000833,
+      emissive: 0x1a4dff,
+      emissiveIntensity: 0,
+      toneMapped: false,
+    });
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(1.15, 0.07, 0.26),
+      new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.5 }),
+    );
+    base.position.set(0, roof + 0.02, 0.15);
+    car.add(base);
+    const lamp = new THREE.BoxGeometry(0.52, 0.09, 0.22);
+    const red = new THREE.Mesh(lamp, this.policeRed);
+    red.position.set(-0.29, roof + 0.09, 0.15);
+    const blue = new THREE.Mesh(lamp, this.policeBlue);
+    blue.position.set(0.29, roof + 0.09, 0.15);
+    car.add(red, blue);
+    car.visible = false;
+    this.scene.add(car);
+    this.policeCar = car;
+  }
+
   private setupTrafficBatch(key: TrafficKey, template: THREE.Group) {
     const parts: THREE.InstancedMesh[] = [];
     template.traverse((object) => {
@@ -1180,6 +1264,22 @@ export class Scene3D {
         indicators.count = signalCount;
         indicators.visible = signalCount > 0;
         indicators.instanceMatrix.needsUpdate = true;
+      }
+    }
+
+    if (this.policeCar) {
+      const pol = s.police;
+      const z = toZ(pol.y);
+      const show = s.mode === "police" && pol.active && z > -TRAFFIC_DRAW_AHEAD && z < VIEW_BEHIND;
+      this.policeCar.visible = show;
+      if (show) {
+        this.policeCar.position.set(toX(pol.x), 0, z);
+        this.policeCar.rotation.y = -pol.rot;
+        // Double-flash pattern alternating red / blue
+        const ph = (this.time * 2.2) % 1;
+        const flash = (a: number) => (ph > a && ph < a + 0.09) || (ph > a + 0.15 && ph < a + 0.24);
+        if (this.policeRed) this.policeRed.emissiveIntensity = flash(0) ? 6 : 0.15;
+        if (this.policeBlue) this.policeBlue.emissiveIntensity = flash(0.5) ? 6 : 0.15;
       }
     }
 
