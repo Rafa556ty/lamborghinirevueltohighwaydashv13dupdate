@@ -963,7 +963,7 @@ export class RacingEngine {
             const lined = Math.abs(pol.x - this.player.x) < this.carW * 0.5;
             pol.speed = lined
               ? Math.max(0, Math.min(pol.speed, ps) - 110 * dt)
-              : Math.max(ps + 8, pol.speed - 40 * dt);
+              : Math.max(ps + 15, pol.speed - 40 * dt);
           }
           if (Math.abs(pol.x - this.player.x) > this.carW * 0.75) pol.holdT = 0;
           if (gapNow > this.lenM * 6) pol.blocking = false; // player got away
@@ -977,7 +977,7 @@ export class RacingEngine {
       // real time, and the heading follows the actual direction of travel
       // (the car visibly turns into the lane instead of sliding sideways).
       const dx = targetX - pol.x;
-      const maxVx = this.laneW * (0.55 + Math.min(pol.speed, 220) / 260);
+      const maxVx = this.laneW * ((pol.cutIn ? 0.95 : 0.55) + Math.min(pol.speed, 220) / 260);
       const wantVx = clamp(dx * 2.2, -maxVx, maxVx);
       pol.vx += (wantVx - pol.vx) * (1 - Math.exp(-5 * dt));
       pol.x += pol.vx * dt;
@@ -1004,7 +1004,7 @@ export class RacingEngine {
         pol.blocking &&
         -gap > this.lenM * 1.1 &&
         -gap < this.lenM * 3 &&
-        Math.abs(pol.x - this.player.x) < this.carW * 0.8
+        Math.abs(pol.x - this.player.x) < this.carW * 0.45
       ) {
         this.phase = "busted";
         this.gameOverOutcome = "busted";
