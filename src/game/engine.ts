@@ -269,6 +269,7 @@ export class RacingEngine {
     vx: 0,
     rot: 0,
     holdT: 0,
+    cutIn: false,
   };
 
   private traffic: TrafficCar[] = [];
@@ -476,6 +477,7 @@ export class RacingEngine {
     this.police.startDelay = START_DELAY;
     this.police.active = this.mode === "police";
     this.police.blocking = false;
+    this.police.cutIn = false;
     this.police.vx = 0;
     this.police.rot = 0;
     this.police.holdT = 0;
@@ -942,7 +944,9 @@ export class RacingEngine {
           const ahead = pol.z - this.pz;
           // Side-by-side clearance: the police only moves past once it's fully in another lane
           const clear = Math.abs(pol.x - this.player.x) > this.carW * 1.1;
-          if (ahead < this.lenM * 1.7) {
+          if (ahead > this.lenM * 1.7) pol.cutIn = true;
+          else if (ahead < this.lenM * 1.15) pol.cutIn = false;
+          if (!pol.cutIn) {
             // Pull out into the free lane first, then overtake alongside
             if (pol.passLane === pLane) pol.passLane = pLane === 0 ? 1 : pLane - 1;
             pol.lane = pol.passLane;
@@ -955,7 +959,11 @@ export class RacingEngine {
           } else {
             // Fully in front: cut into the player's lane and brake hard
             pol.lane = pLane;
-            pol.speed = Math.max(0, Math.min(pol.speed, ps) - 110 * dt);
+            // keep a car-length of room while cutting in, then brake to a stop
+            const lined = Math.abs(pol.x - this.player.x) < this.carW * 0.5;
+            pol.speed = lined
+              ? Math.max(0, Math.min(pol.speed, ps) - 110 * dt)
+              : Math.max(ps + 8, pol.speed - 40 * dt);
           }
           if (Math.abs(pol.x - this.player.x) > this.carW * 0.75) pol.holdT = 0;
           if (gapNow > this.lenM * 6) pol.blocking = false; // player got away
