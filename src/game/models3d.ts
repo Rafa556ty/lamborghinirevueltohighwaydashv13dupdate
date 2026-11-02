@@ -86,10 +86,9 @@ function styleTraffic(root: THREE.Object3D, key: TrafficModelKey) {
     if (n === "tire" || n === "tyre") return mats.rubber;
     if (n.includes("machined") || n === "chrome" || n === "rim" || n === "pole") return mats.chrome;
     if (n === "lamp") return mats.head;
-    // Semi tractor body keeps its own tone, just with a showroom finish.
+    // Semi body keeps its own tones (blue tractor, white trailer), finer finish.
     if (n.startsWith("semi-truck_body")) {
       const std = old as THREE.MeshStandardMaterial;
-      std.color?.setHex(TRAFFIC_PAINT.truck);
       std.map = null;
       std.metalness = 0.5;
       std.roughness = 0.3;

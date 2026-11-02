@@ -15,3 +15,4 @@
 - Keep the racing simulation in `src/game/`, React responsible for menus and HUD, and Three.js rendering dynamically loaded; this avoids per-frame React work and server-side browser API execution.
 - Serve imported car models and engine audio from `public/game-assets` and retain bundled image imports; this keeps the repository's existing media available on this project's origin.
 - Keep the game at `/` with its own page metadata and client-only rendering; the engine depends on browser canvas and audio APIs.
+- Traffic vehicles are real-scale CC0 GLBs in `public/game-assets/traffic-*.glb` (textures stripped, meshopt) restyled into a few shared materials in `models3d.ts`; keeps draw calls low on phones.
