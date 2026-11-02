@@ -99,6 +99,10 @@ export class GameAudio {
   private lastT = 0;
   private crackleUntil = 0;
   private inTunnel = false;
+  private tunnelBoom: BiquadFilterNode | null = null;
+  private tunnelSend: GainNode | null = null;
+  private sirenDistLP: BiquadFilterNode | null = null;
+  private lastGap = 999;
 
   unlock() {
     if (typeof window === "undefined") return;
@@ -126,8 +130,38 @@ export class GameAudio {
       this.tunnelLP.type = "lowpass";
       this.tunnelLP.frequency.value = 18000;
       this.tunnelLP.Q.value = 0.9;
-      this.tunnelLP.connect(comp);
+      // Tunnel body: low-mid boom + concrete echo send (off outside tunnels)
+      this.tunnelBoom = ctx.createBiquadFilter();
+      this.tunnelBoom.type = "lowshelf";
+      this.tunnelBoom.frequency.value = 220;
+      this.tunnelBoom.gain.value = 0;
+      this.tunnelLP.connect(this.tunnelBoom);
+      this.tunnelBoom.connect(comp);
       this.master.connect(this.tunnelLP);
+      this.tunnelSend = ctx.createGain();
+      this.tunnelSend.gain.value = 0;
+      this.master.connect(this.tunnelSend);
+      const echoTone = ctx.createBiquadFilter();
+      echoTone.type = "lowpass";
+      echoTone.frequency.value = 2200;
+      this.tunnelSend.connect(echoTone);
+      for (const [time, fb] of [
+        [0.067, 0.42],
+        [0.113, 0.36],
+        [0.171, 0.3],
+      ] as const) {
+        const d = ctx.createDelay(0.5);
+        d.delayTime.value = time;
+        const f = ctx.createGain();
+        f.gain.value = fb;
+        echoTone.connect(d);
+        d.connect(f);
+        f.connect(d);
+        const out = ctx.createGain();
+        out.gain.value = 0.55;
+        d.connect(out);
+        out.connect(comp);
+      }
       this.comp = comp;
 
       // Engine bus
@@ -285,7 +319,12 @@ export class GameAudio {
     if (!this.master) return;
     this.policeGain = ctx.createGain();
     this.policeGain.gain.value = 0;
-    this.policeGain.connect(this.master);
+    // Distance muffling: far sirens lose their highs, like in real life
+    this.sirenDistLP = ctx.createBiquadFilter();
+    this.sirenDistLP.type = "lowpass";
+    this.sirenDistLP.frequency.value = 900;
+    this.policeGain.connect(this.sirenDistLP);
+    this.sirenDistLP.connect(this.master);
 
     const sirenFilter = ctx.createBiquadFilter();
     sirenFilter.type = "lowpass";
@@ -467,8 +506,14 @@ export class GameAudio {
       return;
     }
 
-    const near = clamp(1 - gap / 560, 0, 1);
-    const vol = 0.07 + 0.38 * near ** 1.3;
+    // Inverse-distance loudness: barely audible far away, loud when close
+    const near = clamp(1 - gap / 600, 0, 1);
+    const vol = clamp(0.012 + 0.44 * (18 / (18 + gap)) ** 0.9 * (0.35 + 0.65 * near), 0, 0.45);
+    if (this.sirenDistLP) this.sirenDistLP.frequency.setTargetAtTime(700 + 7000 * near ** 1.5, t, 0.3);
+    // Doppler: closing in raises the pitch slightly, falling back lowers it
+    const closing = clamp((this.lastGap - gap) * 3, -40, 40);
+    this.lastGap = gap;
+    if (this.sirenOsc) this.sirenOsc.detune.setTargetAtTime(closing * 1.5, t, 0.25);
     const lfoRate = gap < 90 ? 2.8 : 0.3 + near * 0.25;
     this.policeGain.gain.setTargetAtTime(clamp(vol, 0, 0.45), t, 0.3);
     this.sirenLfo.frequency.setTargetAtTime(lfoRate, t, 0.2);
@@ -719,8 +764,12 @@ export class GameAudio {
     this.loadFilter.frequency.setTargetAtTime(throttle ? 8000 : 2600, t, 0.08);
 
     if (this.tunnelLP) {
-      this.tunnelLP.frequency.setTargetAtTime(inTunnel ? 950 : 18000, t, inTunnel ? 0.12 : 0.35);
-      this.tunnelLP.Q.setTargetAtTime(inTunnel ? 2.2 : 0.7, t, 0.2);
+      this.tunnelLP.frequency.setTargetAtTime(inTunnel ? 3200 : 18000, t, inTunnel ? 0.2 : 0.35);
+      this.tunnelLP.Q.setTargetAtTime(inTunnel ? 1.4 : 0.7, t, 0.2);
+    }
+    if (this.tunnelBoom) this.tunnelBoom.gain.setTargetAtTime(inTunnel ? 6 : 0, t, 0.25);
+    if (this.tunnelSend) {
+      this.tunnelSend.gain.setTargetAtTime(inTunnel ? 0.5 : 0, t, inTunnel ? 0.25 : 0.4);
     }
   }
 
