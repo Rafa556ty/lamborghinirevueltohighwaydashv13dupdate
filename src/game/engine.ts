@@ -1174,8 +1174,11 @@ export class RacingEngine {
             const dz = Math.abs(t.z - this.pz);
             const nearPlayer = dz < this.lenM * 1.5;
             const movingTowardsPlayer = nearPlayer && Math.sign(this.player.x - t.x) === dir;
+            // Hold the merge while a car sits alongside in the target lane
+            const stillHome = Math.abs(t.x - this.laneX(t.lane)) < this.laneW * 0.45;
+            const blocked = stillHome && !this.mergeRoom(t);
 
-            if (!movingTowardsPlayer) {
+            if (!movingTowardsPlayer && !blocked) {
               const motion = laneMotion(t.x, t.vx, t.rot, targetX, this.laneW, t.speed, this.k, dt);
               t.x = motion.x;
               t.vx = motion.vx;
@@ -1259,6 +1262,17 @@ export class RacingEngine {
     const behindLimit = this.threeD ? this.baseY + TRAFFIC_KEEP_BEHIND * this.k : this.H + 260;
     const aheadLimit = this.threeD ? this.baseY - TRAFFIC_KEEP_AHEAD * this.k : -this.H * 1.6;
     this.traffic = this.traffic.filter((t) => t.y < behindLimit && t.y > aheadLimit);
+  }
+
+  /** True when nothing overlaps `t` lengthwise in its target lane. */
+  private mergeRoom(t: TrafficCar) {
+    for (const c of this.traffic) {
+      if (c === t || c.hit) continue;
+      if (c.lane !== t.targetLane && !(c.yieldState === "changing" && c.targetLane === t.targetLane))
+        continue;
+      if (Math.abs(c.z - t.z) < (c.h + t.h) / 2 / this.k + 2) return false;
+    }
+    return true;
   }
 
   private spawn() {
