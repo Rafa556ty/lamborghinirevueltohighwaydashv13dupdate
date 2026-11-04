@@ -6,6 +6,20 @@ export const TRAFFIC_KEEP_AHEAD = 650;
 export const TRAFFIC_KEEP_BEHIND = 45;
 export const TRAFFIC_DRAW_AHEAD = 285;
 export const MUSTANG_CHANCE = (2 / 3) * 0.4; // 60% lower than the old two-of-three palette.
+/** BMW M3 Competition: as rare as one Mustang colour. */
+export const BMW_CHANCE = MUSTANG_CHANCE / 2;
+const SPORT = new Set<CarType>(["mustang-blue", "mustang-black", "bmw-m3"]);
+export const isSportCar = (t?: CarType) => !!t && SPORT.has(t);
+/**
+ * Sports-car mood: alternate calm cruising and pushes (sometimes repeating a
+ * phase with a fresh speed and duration) so the rhythm never loops.
+ */
+export function nextSportMood(base: number, wasPush: boolean, r1: number, r2: number, r3: number) {
+  const push = wasPush ? r1 < 0.25 : r1 < 0.7;
+  return push
+    ? { push, cruise: Math.min(235, base + 40 + r2 * 55), duration: 2.5 + r3 * 5 }
+    : { push, cruise: base * (0.88 + r2 * 0.17), duration: 3.5 + r3 * 7.5 };
+}
 // Width/length in metres, matching the real-scale traffic models.
 export const FOOTPRINTS: Record<CarType, [number, number]> = {
   m5: [1.8, 4.1],
@@ -17,10 +31,12 @@ export const FOOTPRINTS: Record<CarType, [number, number]> = {
   truck: [2.55, 19.8],
   "mustang-blue": [1.92, 4.8],
   "mustang-black": [1.92, 4.8],
+  "bmw-m3": [1.9, 4.8],
 };
 export function pickTrafficType(random: number, normalRandom: number, previous?: CarType): CarType {
-  if (!previous?.startsWith("mustang") && random < MUSTANG_CHANCE) {
-    return normalRandom < 0.5 ? "mustang-blue" : "mustang-black";
+  if (!isSportCar(previous)) {
+    if (random < MUSTANG_CHANCE) return normalRandom < 0.5 ? "mustang-blue" : "mustang-black";
+    if (random < MUSTANG_CHANCE + BMW_CHANCE) return "bmw-m3";
   }
   const regular: CarType[] = ["hatch", "sedan", "suv", "pickup", "bus", "truck"];
   return regular[Math.min(regular.length - 1, Math.floor(normalRandom * regular.length))] ?? "hatch";

@@ -7,6 +7,8 @@ import {
   pickTrafficType,
   laneMotion,
   trafficScreenY,
+  isSportCar,
+  nextSportMood,
 } from "./traffic-rules";
 import { pickGear } from "./gearbox";
 import {
@@ -104,10 +106,18 @@ type TrafficCar = LaneCar & {
   targetLane: number;
   yieldState: YieldState;
   nearMissed?: boolean;
+  /** Mustang / BMW: calm vs push phase, its timer and the base cruise speed */
+  sportPush?: boolean;
+  sportTimer?: number;
+  sportBase?: number;
+  rubberT?: number;
 };
 
 type Particle = {
-  kind: "smoke" | "spark" | "debris" | "flame" | "spray";
+  kind: "smoke" | "spark" | "debris" | "flame" | "spray" | "rubber";
+  /** height above the road in metres (rubber bits only) */
+  h?: number;
+  vh?: number;
   x: number;
   y: number;
   vx: number;
@@ -171,6 +181,7 @@ export type RenderParticle = {
   max: number;
   alpha: number;
   dark?: boolean;
+  h?: number;
 };
 
 /** Read-only view of the simulation that a 3D renderer draws each frame. */
@@ -277,6 +288,7 @@ export class RacingEngine {
   private streaks: { x: number; y: number; len: number }[] = [];
   private scroll = 0;
   private shake = 0;
+  private rubberT = 0;
   private flash = 0;
   private crashT = 0;
   private emitT = 0;
@@ -785,6 +797,26 @@ export class RacingEngine {
     const tunnel = inTunnel(this.pz);
     const rain = rainAmount(this.pz);
 
+    // Tiny tyre-rubber bits under hard acceleration (player + sports traffic)
+    if (playing && (inp.gas || this.boostActive) && p.speed > 12 && p.speed < 330) {
+      const hard = (1 - p.speed / 340) * 0.8 + (this.boostActive ? 0.6 : 0);
+      this.rubberT += dt * hard;
+      while (this.rubberT > 0.035) {
+        this.rubberT -= 0.035;
+        const sx = Math.random() < 0.5 ? -1 : 1;
+        this.emitRubber(p.x + sx * p.w * 0.36, this.baseY + p.h * 0.3, p.speed);
+      }
+    }
+    for (const t of this.traffic) {
+      if (!t.sportPush || t.hit || t.speed > t.cruise - 6 || Math.abs(t.z - this.pz) > 90) continue;
+      t.rubberT = (t.rubberT ?? 0) + dt;
+      if (t.rubberT > 0.07) {
+        t.rubberT = 0;
+        const sx = Math.random() < 0.5 ? -1 : 1;
+        this.emitRubber(t.x + sx * t.w * 0.36, t.y + t.h * 0.32, 0);
+      }
+    }
+
     // Wet tire spray particles during rain
     if (playing && rain > 0.08 && p.speed > 35) {
       this.rainSprayT += dt;
@@ -1107,6 +1139,16 @@ export class RacingEngine {
           t.x += t.vx * dt;
           t.vx *= Math.exp(-3 * dt);
         } else {
+          // 0. Sports cars (Mustang / BMW): alternate calm cruising and pushes
+          if (t.sportBase !== undefined && t.yieldState === "idle") {
+            t.sportTimer = (t.sportTimer ?? 0) - dt;
+            if (t.sportTimer <= 0) {
+              const m = nextSportMood(t.sportBase, !!t.sportPush, Math.random(), Math.random(), Math.random());
+              t.sportPush = m.push;
+              t.sportTimer = m.duration;
+              t.originalCruise = m.cruise;
+            }
+          }
           // 1. Yield State Machine
           if (t.yieldState === "accelerating") {
             // Accelerate to overtake the car alongside it
@@ -1132,8 +1174,11 @@ export class RacingEngine {
             const dz = Math.abs(t.z - this.pz);
             const nearPlayer = dz < this.lenM * 1.5;
             const movingTowardsPlayer = nearPlayer && Math.sign(this.player.x - t.x) === dir;
+            // Hold the merge while a car sits alongside in the target lane
+            const stillHome = Math.abs(t.x - this.laneX(t.lane)) < this.laneW * 0.45;
+            const blocked = stillHome && !this.mergeRoom(t);
 
-            if (!movingTowardsPlayer) {
+            if (!movingTowardsPlayer && !blocked) {
               const motion = laneMotion(t.x, t.vx, t.rot, targetX, this.laneW, t.speed, this.k, dt);
               t.x = motion.x;
               t.vx = motion.vx;
@@ -1158,11 +1203,12 @@ export class RacingEngine {
           } else {
             // Idle state: restore normal cruise speed and stay in lane
             const leader = lane[i - 1];
+            const eager = !!t.sportPush;
             if (
               leader &&
-              leader.z - t.z < this.spanM * 4 &&
+              leader.z - t.z < this.spanM * (eager ? 6 : 4) &&
               t.cruise > leader.speed + 8 &&
-              t.signalTimer > 3
+              t.signalTimer > (eager ? 1.5 : 3)
             ) {
               const target = [t.lane - 1, t.lane + 1].find((to) =>
                 laneChangeOk(this.traffic, t, to, {
@@ -1179,7 +1225,7 @@ export class RacingEngine {
               }
             }
             if (t.originalCruise !== undefined && Math.abs(t.cruise - t.originalCruise) > 1) {
-              t.cruise += (t.originalCruise - t.cruise) * (1 - Math.exp(-2.5 * dt));
+              t.cruise += (t.originalCruise - t.cruise) * (1 - Math.exp(-(t.sportPush ? 1.2 : 2.5) * dt));
             }
             const curLaneX = this.laneX(t.lane);
             t.x += (curLaneX - t.x) * (1 - Math.exp(-12 * dt));
@@ -1189,7 +1235,14 @@ export class RacingEngine {
 
           // 2. Anti-Collision and safe spacing (cars never enter inside each other)
           let desired = Math.min(t.cruise, capOf.get(t) ?? Infinity);
-          const ahead = i > 0 ? (lane[i - 1] ?? null) : null;
+          let ahead = i > 0 ? (lane[i - 1] ?? null) : null;
+          // While merging, also respect the nearest car ahead in the target lane
+          if (t.yieldState === "changing" && t.targetLane !== t.lane) {
+            for (const c of byLane[t.targetLane] ?? []) {
+              if (c === t || c.hit || c.z <= t.z) continue;
+              if (!ahead || c.z < ahead.z) ahead = c;
+            }
+          }
           if (ahead) {
             const gap = ahead.z - t.z;
             const minGap = ((t.h + ahead.h) / 2 / this.k) * 1.35 + 2.5;
@@ -1216,6 +1269,21 @@ export class RacingEngine {
     const behindLimit = this.threeD ? this.baseY + TRAFFIC_KEEP_BEHIND * this.k : this.H + 260;
     const aheadLimit = this.threeD ? this.baseY - TRAFFIC_KEEP_AHEAD * this.k : -this.H * 1.6;
     this.traffic = this.traffic.filter((t) => t.y < behindLimit && t.y > aheadLimit);
+  }
+
+  /** True when nothing overlaps `t` lengthwise in its target lane. */
+  private mergeRoom(t: TrafficCar) {
+    for (const c of this.traffic) {
+      if (c === t || c.hit) continue;
+      if (c.lane !== t.targetLane && !(c.yieldState === "changing" && c.targetLane === t.targetLane))
+        continue;
+      const dz = c.z - t.z;
+      const need = (c.h + t.h) / 2 / this.k + 2;
+      // ahead and slower: leave room to brake down to its speed
+      const closing = dz > 0 ? Math.max(0, (t.speed - c.speed) / 3.6) * 1.6 : 0;
+      if (Math.abs(dz) < need + closing) return false;
+    }
+    return true;
   }
 
   private spawn() {
@@ -1252,6 +1320,7 @@ export class RacingEngine {
           { type: "truck", img: this.images.bus, minSpeed: 70, maxSpeed: 88, preferredLane: 2 },
           { type: "mustang-blue", img: this.images.mustangBlue, minSpeed: 100, maxSpeed: 160 },
           { type: "mustang-black", img: this.images.mustangBlack, minSpeed: 100, maxSpeed: 160 },
+          { type: "bmw-m3", img: this.images.mustangBlack, minSpeed: 100, maxSpeed: 150 },
         ]
       : [
           { type: "sedan", img: this.images.sedan, minSpeed: 85, maxSpeed: 115 },
@@ -1311,6 +1380,9 @@ export class RacingEngine {
       signalTimer: 0,
       yieldState: "idle",
       originalCruise: cruise,
+      ...(isSportCar(pick.type)
+        ? { sportBase: cruise, sportPush: false, sportTimer: rnd(1.5, 6) }
+        : {}),
     });
   }
 
@@ -1395,6 +1467,27 @@ export class RacingEngine {
     }
   }
 
+  private emitRubber(x: number, y: number, speed: number) {
+    if (this.particles.length > 420) return;
+    const ppm = this.k;
+    this.particles.push({
+      kind: "rubber",
+      x: x + rnd(-0.12, 0.12) * ppm,
+      y,
+      vx: rnd(-1.2, 1.2) * ppm,
+      // flung backwards off the tread, slower than the car so it trails behind
+      vy: rnd(1.5, 4) * ppm + Math.min(speed, 120) * 0.02 * ppm,
+      h: rnd(0.04, 0.12),
+      vh: rnd(0.8, 2.4),
+      life: 0,
+      max: rnd(1.1, 1.9),
+      size: rnd(0.03, 0.06) * ppm,
+      grow: 0,
+      alpha: rnd(0.75, 0.95),
+      rot: 0,
+    });
+  }
+
   private emitSmoke(x: number, y: number, dark: boolean) {
     if (this.particles.length > 520) return;
     this.particles.push({
@@ -1451,6 +1544,19 @@ export class RacingEngine {
         q.size += q.grow * dt;
         q.vx *= Math.exp(-2.5 * dt);
         q.vy *= Math.exp(-2.0 * dt);
+      } else if (q.kind === "rubber") {
+        // falls under gravity, air drag drags it along, then skids on the asphalt
+        q.vh = (q.vh ?? 0) - 9.8 * dt;
+        q.h = (q.h ?? 0) + q.vh * dt;
+        if (q.h <= 0.015) {
+          q.h = 0.015;
+          q.vh = 0;
+          q.vx *= Math.exp(-9 * dt);
+          q.vy *= Math.exp(-9 * dt);
+        } else {
+          q.vx *= Math.exp(-1.2 * dt);
+          q.vy *= Math.exp(-1.2 * dt);
+        }
       } else if (q.kind === "debris") {
         q.vx *= Math.exp(-3 * dt);
         q.vy *= Math.exp(-3 * dt);
