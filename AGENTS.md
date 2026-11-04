@@ -16,3 +16,4 @@
 - Serve imported car models and engine audio from `public/game-assets` and retain bundled image imports; this keeps the repository's existing media available on this project's origin.
 - Keep the game at `/` with its own page metadata and client-only rendering; the engine depends on browser canvas and audio APIs.
 - Traffic vehicles are real-scale CC0 GLBs in `public/game-assets/traffic-*.glb` (textures stripped, meshopt) restyled into a few shared materials in `models3d.ts`; keeps draw calls low on phones.
+- Sports traffic (Mustang, BMW) alternates calm/push moods via pure `nextSportMood` in `traffic-rules.ts`; merging cars respect the target lane's leader so lanes never overlap.
