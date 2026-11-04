@@ -486,6 +486,11 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
         });
         const result = batchCar(normalizeCar(scene, spec));
         if (key === "revuelto") isolateActiveWing(result);
+        if (key === "bmw") {
+          // Stray parts hang below the tyres; sit the real tyres on the road.
+          const tyre = result.children.find((c) => c.name === "Material_362");
+          if (tyre) result.position.y -= new THREE.Box3().setFromObject(tyre).min.y;
+        }
         return result;
       });
     p.catch(() => cache.delete(key));
