@@ -12,9 +12,10 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 // Same detailed model the garage shows, so the race car looks identical.
 import revueltoAsset from "@/assets/models/revuelto.glb.asset.json";
 import mustangAsset from "@/assets/models/mustang-gt-traffic.glb.asset.json";
+import bmwAsset from "@/assets/models/bmw-m4-traffic.glb.asset.json";
 
 export type TrafficModelKey = "hatch" | "sedan" | "suv" | "pickup" | "bus" | "truck";
-export type ModelKey = "revuelto" | "mustang" | TrafficModelKey;
+export type ModelKey = "revuelto" | "mustang" | "bmw" | TrafficModelKey;
 
 type ModelSpec = {
   url: string;
@@ -27,6 +28,7 @@ type ModelSpec = {
 export const MODEL_SPECS: Record<ModelKey, ModelSpec> = {
   revuelto: { url: revueltoAsset.url, length: 4.95, yaw: 0 },
   mustang: { url: mustangAsset.url, length: 4.8, yaw: 0 },
+  bmw: { url: bmwAsset.url, length: 4.8, yaw: 0 },
   hatch: { url: "/game-assets/traffic-hatch.glb", length: 4.1, yaw: Math.PI },
   sedan: { url: "/game-assets/traffic-sedan.glb", length: 4.7, yaw: Math.PI },
   suv: { url: "/game-assets/traffic-suv.glb", length: 4.65, yaw: Math.PI },
@@ -308,6 +310,29 @@ export function paintRevuelto(root: THREE.Object3D) {
   });
 }
 
+/** BMW M3 Competition look: Alpine White paint, carbon roof/mirrors kept black. */
+function paintBmw(root: THREE.Object3D) {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      const std = mat as THREE.MeshPhysicalMaterial;
+      if (mat.name === "PaletteMaterial001") {
+        std.map = null;
+        std.color.setHex(0xeeefec);
+        std.metalness = 0.15;
+        std.roughness = 0.22;
+        if ("clearcoat" in std) std.clearcoat = 1;
+        std.needsUpdate = true;
+      } else if (mat.name === "Material_698") {
+        std.color.setHex(0x1a1b1e); // carbon roof, mirror caps, lip
+        std.roughness = 0.35;
+        std.needsUpdate = true;
+      }
+    }
+  });
+}
+
 /** Static cars share one draw per compatible material, not one per tiny part. */
 function batchCar(root: THREE.Group): THREE.Group {
   root.updateMatrixWorld(true);
@@ -408,6 +433,7 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
       .then((scene) => {
         if (key === "revuelto") paintRevuelto(scene);
         if (TRAFFIC_KEYS.has(key)) styleTraffic(scene, key as TrafficModelKey);
+        if (key === "bmw") paintBmw(scene);
         if (key === "mustang") {
           scene.traverse((o) => {
             const m = o as THREE.Mesh;

@@ -39,6 +39,7 @@ const TYPE_MODEL: Record<CarType, TrafficKey> = {
   m5: "hatch",
   "mustang-blue": "mustang",
   "mustang-black": "mustang",
+  "bmw-m3": "bmw",
   bus: "bus",
   truck: "truck",
   suv: "suv",
@@ -54,6 +55,7 @@ const MODEL_FOOTPRINT: Partial<Record<TrafficKey, [number, number]>> = {
   bus: FOOTPRINTS.bus,
   truck: FOOTPRINTS.truck,
   mustang: FOOTPRINTS["mustang-blue"],
+  bmw: FOOTPRINTS["bmw-m3"],
 };
 
 const hash = (n: number) => {
@@ -754,7 +756,7 @@ export class Scene3D {
       return null;
     });
     if (player) this.setupPlayer(player.clone(true));
-    const keys: ModelKey[] = ["hatch", "sedan", "suv", "pickup", "bus", "truck", "mustang"];
+    const keys: ModelKey[] = ["hatch", "sedan", "suv", "pickup", "bus", "truck", "mustang", "bmw"];
     await Promise.all(
       keys.map((k) =>
         loadCar(k)
@@ -1289,6 +1291,9 @@ export class Scene3D {
     // --- chase camera
     this.camX = lerp(this.camX, playerX, 1 - Math.exp(-6 * dt));
     const speedK = Math.min(1, s.player.speed / 340);
+    // Pull back a little while accelerating for a sense of speed (no exaggeration)
+    const pullTarget = s.gas && s.player.speed < 345 ? (s.boost ? 1 : 0.7) : 0;
+    this.camPull = lerp(this.camPull, pullTarget, 1 - Math.exp(-(pullTarget > this.camPull ? 1.6 : 2.4) * dt));
     const fov = 60 + speedK * 12;
     if (Math.abs(this.camera.fov - fov) > 0.05) {
       this.camera.fov = fov;
@@ -1297,8 +1302,8 @@ export class Scene3D {
     const sh = s.shake * 0.012;
     this.camera.position.set(
       this.camX * 0.9 + (Math.random() - 0.5) * sh,
-      2.05 - speedK * 0.25 + (Math.random() - 0.5) * sh,
-      6.6 - speedK * 0.8,
+      2.05 - speedK * 0.25 + this.camPull * 0.14 + (Math.random() - 0.5) * sh,
+      6.6 - speedK * 0.8 + this.camPull * 0.75,
     );
     this.camera.lookAt(this.camX * 0.95, 0.85, -16);
 
@@ -1526,7 +1531,9 @@ export class Scene3D {
       sp.visible = true;
       sp.position.set(
         toX(q.x),
-        0.4 + (q.kind === "smoke" ? life * 2.4 : q.kind === "spark" ? 0.4 : 0.15),
+        q.kind === "rubber"
+          ? (q.h ?? 0.02)
+          : 0.4 + (q.kind === "smoke" ? life * 2.4 : q.kind === "spark" ? 0.4 : 0.15),
         toZ(q.y),
       );
       const size = (q.size / s.ppm) * (q.kind === "smoke" ? 2.2 : q.kind === "spark" ? 3 : 1.6);
@@ -1543,12 +1550,12 @@ export class Scene3D {
             ? 0xd5dde6
             : q.dark
               ? 0x2a2a2c
-              : q.kind === "debris"
+              : q.kind === "debris" || q.kind === "rubber"
                 ? 0x111111
                 : 0x9a9a9e,
         );
       }
-      mat.opacity = q.alpha * (1 - life);
+      mat.opacity = q.kind === "rubber" ? q.alpha * Math.min(1, (1 - life) * 3) : q.alpha * (1 - life);
     }
     for (; i < this.sprites.length; i++) {
       const sprite = this.sprites[i];
