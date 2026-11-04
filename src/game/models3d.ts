@@ -424,8 +424,16 @@ function batchCar(root: THREE.Group): THREE.Group {
       mesh.name = material.name;
       mesh.castShadow = true;
       result.add(mesh);
+      for (const geometry of geometries) geometry.dispose();
+    } else {
+      // Merge refused (mismatched streams): keep each part, never drop it (lost tyres).
+      for (const geometry of geometries) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = material.name;
+        mesh.castShadow = true;
+        result.add(mesh);
+      }
     }
-    for (const geometry of geometries) geometry.dispose();
   }
   return result.children.length ? result : root;
 }
