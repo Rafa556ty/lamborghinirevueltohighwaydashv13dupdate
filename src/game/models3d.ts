@@ -489,7 +489,9 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
         if (key === "bmw") {
           // Stray parts hang below the tyres; sit the real tyres on the road.
           const tyre = result.children.find((c) => c.name === "Material_362");
-          if (tyre) result.position.y -= new THREE.Box3().setFromObject(tyre).min.y;
+          const lift = tyre ? new THREE.Box3().setFromObject(tyre).min.y : 0;
+          // Bake into geometry: traffic batches draw child geometry, not group offsets.
+          if (lift) result.traverse((o) => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.translate(0, -lift, 0));
         }
         return result;
       });
