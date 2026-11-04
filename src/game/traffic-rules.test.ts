@@ -52,3 +52,21 @@ describe("requested traffic and aero rules", () => {
   it("retracts the wing when stopped", () =>
     expect(stepAero({ lift: 1, tilt: 0 }, 0, false, 5).lift).toBeLessThan(0.01));
 });
+
+import { BMW_CHANCE, nextSportMood, isSportCar } from "./traffic-rules";
+describe("BMW M3 and sports-car rhythm", () => {
+  it("BMW is as rare as one Mustang colour and never follows another sports car", () => {
+    expect(BMW_CHANCE).toBeCloseTo(MUSTANG_CHANCE / 2);
+    expect(pickTrafficType(MUSTANG_CHANCE + BMW_CHANCE / 2, 0)).toBe("bmw-m3");
+    expect(pickTrafficType(MUSTANG_CHANCE + BMW_CHANCE / 2, 0, "bmw-m3")).toBe("hatch");
+    expect(isSportCar("bmw-m3") && isSportCar("mustang-blue") && !isSportCar("sedan")).toBe(true);
+  });
+  it("pushes speed above base, calms near base", () => {
+    const push = nextSportMood(120, false, 0, 0.5, 0.5);
+    expect(push.push).toBe(true);
+    expect(push.cruise).toBeGreaterThan(150);
+    const calm = nextSportMood(120, true, 0.9, 0.5, 0.5);
+    expect(calm.push).toBe(false);
+    expect(calm.cruise).toBeLessThan(130);
+  });
+});

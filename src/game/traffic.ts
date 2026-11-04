@@ -9,7 +9,8 @@ export type CarType =
   | "pickup"
   | "m5"
   | "mustang-blue"
-  | "mustang-black";
+  | "mustang-black"
+  | "bmw-m3";
 
 export type YieldState = "idle" | "accelerating" | "changing";
 
