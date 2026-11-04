@@ -1235,7 +1235,14 @@ export class RacingEngine {
 
           // 2. Anti-Collision and safe spacing (cars never enter inside each other)
           let desired = Math.min(t.cruise, capOf.get(t) ?? Infinity);
-          const ahead = i > 0 ? (lane[i - 1] ?? null) : null;
+          let ahead = i > 0 ? (lane[i - 1] ?? null) : null;
+          // While merging, also respect the nearest car ahead in the target lane
+          if (t.yieldState === "changing" && t.targetLane !== t.lane) {
+            for (const c of byLane[t.targetLane] ?? []) {
+              if (c === t || c.hit || c.z <= t.z) continue;
+              if (!ahead || c.z < ahead.z) ahead = c;
+            }
+          }
           if (ahead) {
             const gap = ahead.z - t.z;
             const minGap = ((t.h + ahead.h) / 2 / this.k) * 1.35 + 2.5;
@@ -1270,7 +1277,11 @@ export class RacingEngine {
       if (c === t || c.hit) continue;
       if (c.lane !== t.targetLane && !(c.yieldState === "changing" && c.targetLane === t.targetLane))
         continue;
-      if (Math.abs(c.z - t.z) < (c.h + t.h) / 2 / this.k + 2) return false;
+      const dz = c.z - t.z;
+      const need = (c.h + t.h) / 2 / this.k + 2;
+      // ahead and slower: leave room to brake down to its speed
+      const closing = dz > 0 ? Math.max(0, (t.speed - c.speed) / 3.6) * 1.6 : 0;
+      if (Math.abs(dz) < need + closing) return false;
     }
     return true;
   }
