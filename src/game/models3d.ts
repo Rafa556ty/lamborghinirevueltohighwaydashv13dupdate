@@ -312,6 +312,13 @@ export function paintRevuelto(root: THREE.Object3D) {
 
 /** BMW M3 Competition look: Alpine White paint, carbon roof/mirrors kept black. */
 function paintBmw(root: THREE.Object3D) {
+  // A stray brake part hangs 0.7 m below the tyres and lifted the car off the road.
+  const stray: THREE.Object3D[] = [];
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && !Array.isArray(m.material) && m.material.name === "Material_774") stray.push(o);
+  });
+  for (const o of stray) o.removeFromParent();
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
