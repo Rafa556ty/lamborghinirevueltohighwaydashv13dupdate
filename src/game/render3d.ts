@@ -311,6 +311,7 @@ export class Scene3D {
 
   private time = 0;
   private camX = 0;
+  private camPull = 0;
   private ready = false;
 
   constructor(
@@ -1292,7 +1293,7 @@ export class Scene3D {
     this.camX = lerp(this.camX, playerX, 1 - Math.exp(-6 * dt));
     const speedK = Math.min(1, s.player.speed / 340);
     // Pull back a little while accelerating for a sense of speed (no exaggeration)
-    const pullTarget = s.gas && s.player.speed < 345 ? (s.boost ? 1 : 0.7) : 0;
+    const pullTarget = s.gas && s.player.speed < 345 ? (s.boostActive ? 1 : 0.7) : 0;
     this.camPull = lerp(this.camPull, pullTarget, 1 - Math.exp(-(pullTarget > this.camPull ? 1.6 : 2.4) * dt));
     const fov = 60 + speedK * 12;
     if (Math.abs(this.camera.fov - fov) > 0.05) {
