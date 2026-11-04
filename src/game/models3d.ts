@@ -312,6 +312,13 @@ export function paintRevuelto(root: THREE.Object3D) {
 
 /** BMW M3 Competition look: Alpine White paint, carbon roof/mirrors kept black. */
 function paintBmw(root: THREE.Object3D) {
+  // A stray brake part hangs 0.7 m below the tyres and lifted the car off the road.
+  const stray: THREE.Object3D[] = [];
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && !Array.isArray(m.material) && m.material.name === "Material_774") stray.push(o);
+  });
+  for (const o of stray) o.removeFromParent();
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
@@ -417,8 +424,16 @@ function batchCar(root: THREE.Group): THREE.Group {
       mesh.name = material.name;
       mesh.castShadow = true;
       result.add(mesh);
+      for (const geometry of geometries) geometry.dispose();
+    } else {
+      // Merge refused (mismatched streams): keep each part, never drop it (lost tyres).
+      for (const geometry of geometries) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = material.name;
+        mesh.castShadow = true;
+        result.add(mesh);
+      }
     }
-    for (const geometry of geometries) geometry.dispose();
   }
   return result.children.length ? result : root;
 }
@@ -471,6 +486,13 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
         });
         const result = batchCar(normalizeCar(scene, spec));
         if (key === "revuelto") isolateActiveWing(result);
+        if (key === "bmw") {
+          // Stray parts hang below the tyres; sit the real tyres on the road.
+          const tyre = result.children.find((c) => c.name === "Material_362");
+          const lift = tyre ? new THREE.Box3().setFromObject(tyre).min.y : 0;
+          // Bake into geometry: traffic batches draw child geometry, not group offsets.
+          if (lift) result.traverse((o) => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.translate(0, -lift, 0));
+        }
         return result;
       });
     p.catch(() => cache.delete(key));
