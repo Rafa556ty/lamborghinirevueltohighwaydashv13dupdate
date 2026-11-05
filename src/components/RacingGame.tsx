@@ -55,6 +55,7 @@ import {
   type HudData,
 } from "@/game/engine";
 import { LANGUAGES, TRANSLATIONS, getSavedLanguage, saveLanguage, type Language } from "@/lib/i18n";
+import type { CameraView } from "@/game/camera-views";
 
 type Key = keyof GameInput;
 type Phase = "loading" | "menu" | "playing" | "over";
@@ -82,6 +83,7 @@ export function RacingGame() {
   const flashRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<RacingEngine | null>(null);
   const audioRef = useRef<GameAudio | null>(null);
+  const scene3dRef = useRef<import("@/game/render3d").Scene3D | null>(null);
 
   const pointers = useRef<Record<Key, Set<number>>>({
     left: new Set(),
@@ -135,6 +137,15 @@ export function RacingGame() {
   } | null>(null);
   const [muted, setMuted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [camView, setCamView] = useState<CameraView>("chase");
+
+  const cycleCamera = useCallback(() => {
+    const next = scene3dRef.current?.cycleCamera();
+    if (next) {
+      setCamView(next);
+      triggerHaptic(10);
+    }
+  }, []);
 
   const togglePause = useCallback(() => {
     setIsPaused((prev) => {
@@ -270,6 +281,7 @@ export function RacingGame() {
             el.dataset["sceneReady"] = "true";
           });
           scene3d = scene;
+          scene3dRef.current = scene;
           scene.resize(el.clientWidth, el.clientHeight);
           engine.onRender = scene.render;
         });
@@ -293,6 +305,7 @@ export function RacingGame() {
       engineRef.current?.stop();
       engineRef.current = null;
       if (import.meta.env.DEV) delete (window as Window & { __game?: unknown }).__game;
+      scene3dRef.current = null;
       scene3d?.dispose();
       audio.dispose();
       audioRef.current = null;
@@ -323,6 +336,13 @@ export function RacingGame() {
           return;
         }
       }
+      if (down && e.code === "KeyC") {
+        if (phase === "playing") {
+          e.preventDefault();
+          cycleCamera();
+        }
+        return;
+      }
       const k = map[e.code];
       if (!k) return;
       e.preventDefault();
@@ -338,7 +358,7 @@ export function RacingGame() {
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
     };
-  }, [sync, phase, togglePause]);
+  }, [sync, phase, togglePause, cycleCamera]);
 
   const startGame = (chosenMode?: "free" | "police") => {
     const selected = chosenMode ?? mode;
