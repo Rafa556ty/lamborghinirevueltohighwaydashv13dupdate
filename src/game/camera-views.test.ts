@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { CAMERA_POSES, CAMERA_VIEWS, nextCameraView } from "./camera-views";
+import {
+  CAMERA_POSES,
+  CAMERA_VIEWS,
+  nextCameraView,
+  type CameraView,
+} from "./camera-views";
 
 describe("camera views", () => {
   it("cycles through every view and wraps back to the chase cam", () => {
-    let v = CAMERA_VIEWS[0];
+    let v: CameraView = CAMERA_VIEWS[0];
     const seen = [v];
     for (let i = 0; i < CAMERA_VIEWS.length; i++) {
       v = nextCameraView(v);
