@@ -425,6 +425,14 @@ export function RacingGame() {
       ? policeZoneConfig[hud.policeZone]
       : policeZoneConfig.green;
 
+  const camLabels: Record<CameraView, string> = {
+    chase: t.camChase,
+    hood: t.camHood,
+    left: t.camLeft,
+    right: t.camRight,
+    reverse: t.camReverse,
+  };
+
   return (
     <main
       className="game-surface fixed inset-0 flex justify-center bg-background"
@@ -602,8 +610,8 @@ export function RacingGame() {
               className="pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col items-center justify-end px-4 pb-[max(env(safe-area-inset-bottom),14px)]"
               style={{ height: CONTROLS_H }}
             >
-              {/* Dedicated Ergonomic Horn Button ("BUZINA") */}
-              <div className="mb-2 flex w-full justify-center">
+              {/* Dedicated Ergonomic Horn Button ("BUZINA") + Camera view switch */}
+              <div className="mb-2 flex w-full items-center justify-center gap-3">
                 <button
                   type="button"
                   {...press("horn")}
@@ -617,6 +625,18 @@ export function RacingGame() {
                 >
                   <Volume1 className="size-4 text-primary" />
                   <span className="font-display text-sm tracking-widest">{t.horn}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={cycleCamera}
+                  aria-label={t.camera}
+                  className="corner-cut flex items-center justify-center gap-2 px-4 py-2 border border-hud-border bg-hud/90 text-foreground/90 hover:bg-secondary transition-all duration-75 active:scale-95 shadow-lg"
+                >
+                  <Camera className="size-4 text-primary" />
+                  <span className="font-display text-sm tracking-widest">
+                    {camLabels[camView]}
+                  </span>
                 </button>
               </div>
 
