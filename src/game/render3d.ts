@@ -9,6 +9,7 @@ import type { RenderSnapshot } from "./engine";
 import type { CarType } from "./traffic";
 import { loadCar, type ModelKey } from "./models3d";
 import { FOOTPRINTS, TRAFFIC_DRAW_AHEAD } from "./traffic-rules";
+import { CAMERA_POSES, nextCameraView, type CameraView } from "./camera-views";
 import { stepAero, type AeroState } from "./aero";
 import { AdaptiveResolution, phoneProfile } from "./quality";
 import {
@@ -30,7 +31,9 @@ const ROAD_W = LANE_W * 3;
 const SHOULDER = 1.6;
 const DECK_W = ROAD_W + SHOULDER * 2; // asphalt incl. shoulders
 const VIEW_AHEAD = 260;
-const VIEW_BEHIND = 30;
+// Deep rear view: the reverse camera looks back, so road, scenery and traffic
+// stay rendered well behind the car instead of vanishing.
+const VIEW_BEHIND = 110;
 const TILE_LEN = 24; // metres of road per texture tile
 const STRIP_LEN = VIEW_AHEAD + VIEW_BEHIND;
 
@@ -312,6 +315,7 @@ export class Scene3D {
   private time = 0;
   private camX = 0;
   private camPull = 0;
+  private camView: CameraView = "chase";
   private ready = false;
 
   constructor(
@@ -1115,6 +1119,17 @@ export class Scene3D {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Switch to the next camera view (chase → hood → left → right → reverse). */
+  cycleCamera(): CameraView {
+    this.camView = nextCameraView(this.camView);
+    this.canvas.dataset["camMode"] = this.camView;
+    return this.camView;
+  }
+
+  get cameraView(): CameraView {
+    return this.camView;
+  }
+
   // ---------- per frame ----------
   render = (s: RenderSnapshot) => {
     const now = performance.now();
@@ -1301,12 +1316,25 @@ export class Scene3D {
       this.camera.updateProjectionMatrix();
     }
     const sh = s.shake * 0.012;
-    this.camera.position.set(
-      this.camX * 0.9 + (Math.random() - 0.5) * sh,
-      2.05 - speedK * 0.25 + this.camPull * 0.14 + (Math.random() - 0.5) * sh,
-      6.6 - speedK * 0.8 + this.camPull * 0.75,
-    );
-    this.camera.lookAt(this.camX * 0.95, 0.85, -16);
+    const pose = this.camView === "chase" ? null : CAMERA_POSES[this.camView];
+    if (!pose) {
+      this.camera.position.set(
+        this.camX * 0.9 + (Math.random() - 0.5) * sh,
+        2.05 - speedK * 0.25 + this.camPull * 0.14 + (Math.random() - 0.5) * sh,
+        6.6 - speedK * 0.8 + this.camPull * 0.75,
+      );
+      this.camera.lookAt(this.camX * 0.95, 0.85, -16);
+    } else {
+      // Fixed views (hood / sides / reverse) keep a steady framing; the whole
+      // world around the car stays rendered, so nothing pops in while looking back.
+      const fixed = sh * 0.5;
+      this.camera.position.set(
+        this.camX + pose.pos.dx + (Math.random() - 0.5) * fixed,
+        pose.pos.y + (Math.random() - 0.5) * fixed,
+        pose.pos.z,
+      );
+      this.camera.lookAt(this.camX + pose.look.dx, pose.look.y, pose.look.z);
+    }
 
     // flash / police danger overlay
     if (this.overlay) {
@@ -1381,7 +1409,11 @@ export class Scene3D {
 
     if (this.buildings && this.rooftops) {
       let count = 0;
-      for (let n = Math.floor((pz - 70) / 28); n * 28 < pz + VIEW_AHEAD + 90 && count < 72; n++) {
+      for (
+        let n = Math.floor((pz - VIEW_BEHIND) / 28);
+        n * 28 < pz + VIEW_AHEAD + 90 && count < 72;
+        n++
+      ) {
         for (const side of [-1, 1]) {
           const z = n * 28;
           if (tunnelAt(z)) continue;

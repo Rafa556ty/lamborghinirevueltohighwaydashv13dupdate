@@ -55,6 +55,7 @@ import {
   type HudData,
 } from "@/game/engine";
 import { LANGUAGES, TRANSLATIONS, getSavedLanguage, saveLanguage, type Language } from "@/lib/i18n";
+import type { CameraView } from "@/game/camera-views";
 
 type Key = keyof GameInput;
 type Phase = "loading" | "menu" | "playing" | "over";
@@ -82,6 +83,7 @@ export function RacingGame() {
   const flashRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<RacingEngine | null>(null);
   const audioRef = useRef<GameAudio | null>(null);
+  const scene3dRef = useRef<import("@/game/render3d").Scene3D | null>(null);
 
   const pointers = useRef<Record<Key, Set<number>>>({
     left: new Set(),
@@ -135,6 +137,15 @@ export function RacingGame() {
   } | null>(null);
   const [muted, setMuted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [camView, setCamView] = useState<CameraView>("chase");
+
+  const cycleCamera = useCallback(() => {
+    const next = scene3dRef.current?.cycleCamera();
+    if (next) {
+      setCamView(next);
+      triggerHaptic(10);
+    }
+  }, []);
 
   const togglePause = useCallback(() => {
     setIsPaused((prev) => {
@@ -270,6 +281,7 @@ export function RacingGame() {
             el.dataset["sceneReady"] = "true";
           });
           scene3d = scene;
+          scene3dRef.current = scene;
           scene.resize(el.clientWidth, el.clientHeight);
           engine.onRender = scene.render;
         });
@@ -293,6 +305,7 @@ export function RacingGame() {
       engineRef.current?.stop();
       engineRef.current = null;
       if (import.meta.env.DEV) delete (window as Window & { __game?: unknown }).__game;
+      scene3dRef.current = null;
       scene3d?.dispose();
       audio.dispose();
       audioRef.current = null;
@@ -323,6 +336,13 @@ export function RacingGame() {
           return;
         }
       }
+      if (down && e.code === "KeyC") {
+        if (phase === "playing") {
+          e.preventDefault();
+          cycleCamera();
+        }
+        return;
+      }
       const k = map[e.code];
       if (!k) return;
       e.preventDefault();
@@ -338,7 +358,7 @@ export function RacingGame() {
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
     };
-  }, [sync, phase, togglePause]);
+  }, [sync, phase, togglePause, cycleCamera]);
 
   const startGame = (chosenMode?: "free" | "police") => {
     const selected = chosenMode ?? mode;
@@ -404,6 +424,14 @@ export function RacingGame() {
     hud.policeZone && policeZoneConfig[hud.policeZone]
       ? policeZoneConfig[hud.policeZone]
       : policeZoneConfig.green;
+
+  const camLabels: Record<CameraView, string> = {
+    chase: t.camChase,
+    hood: t.camHood,
+    left: t.camLeft,
+    right: t.camRight,
+    reverse: t.camReverse,
+  };
 
   return (
     <main
@@ -582,8 +610,8 @@ export function RacingGame() {
               className="pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col items-center justify-end px-4 pb-[max(env(safe-area-inset-bottom),14px)]"
               style={{ height: CONTROLS_H }}
             >
-              {/* Dedicated Ergonomic Horn Button ("BUZINA") */}
-              <div className="mb-2 flex w-full justify-center">
+              {/* Dedicated Ergonomic Horn Button ("BUZINA") + Camera view switch */}
+              <div className="mb-2 flex w-full items-center justify-center gap-3">
                 <button
                   type="button"
                   {...press("horn")}
@@ -597,6 +625,18 @@ export function RacingGame() {
                 >
                   <Volume1 className="size-4 text-primary" />
                   <span className="font-display text-sm tracking-widest">{t.horn}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={cycleCamera}
+                  aria-label={t.camera}
+                  className="corner-cut flex items-center justify-center gap-2 px-4 py-2 border border-hud-border bg-hud/90 text-foreground/90 hover:bg-secondary transition-all duration-75 active:scale-95 shadow-lg"
+                >
+                  <Camera className="size-4 text-primary" />
+                  <span className="font-display text-sm tracking-widest">
+                    {camLabels[camView]}
+                  </span>
                 </button>
               </div>
 

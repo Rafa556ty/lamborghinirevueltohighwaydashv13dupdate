@@ -3,7 +3,8 @@ import type { CarType } from "./traffic";
 // Spawn beyond the fog, retain fast traffic even when it drives into the distance.
 export const TRAFFIC_SPAWN_AHEAD = 290;
 export const TRAFFIC_KEEP_AHEAD = 650;
-export const TRAFFIC_KEEP_BEHIND = 45;
+// Passed cars stay alive far behind so the reverse camera can show them.
+export const TRAFFIC_KEEP_BEHIND = 115;
 export const TRAFFIC_DRAW_AHEAD = 285;
 export const MUSTANG_CHANCE = (2 / 3) * 0.4; // 60% lower than the old two-of-three palette.
 /** BMW M3 Competition: as rare as one Mustang colour. */
