@@ -925,8 +925,8 @@ export class Scene3D {
     this.playerWheels.length = 0;
     car.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh && m.userData.wheel) {
-        this.playerWheels.push({ mesh: m, radius: m.userData.radius || 0.34 });
+      if (m.isMesh && m.userData["wheel"]) {
+        this.playerWheels.push({ mesh: m, radius: m.userData["radius"] || 0.34 });
       }
     });
 
