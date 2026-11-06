@@ -291,6 +291,7 @@ export class Scene3D {
   private playerTail: THREE.MeshStandardMaterial[] = [];
   private playerHead: THREE.MeshStandardMaterial[] = [];
   private playerBrakeOnly: THREE.MeshStandardMaterial[] = [];
+  private playerWheels: { mesh: THREE.Mesh; radius: number }[] = [];
   private engineBrakeLight: THREE.Mesh | null = null;
   private rimWarm = new THREE.DirectionalLight(0xffb347, 1.5);
   private rimCool = new THREE.DirectionalLight(0x7fb2ff, 0.8);
@@ -919,6 +920,15 @@ export class Scene3D {
     car.add(roadBeam);
     this.roadBeamMesh = roadBeam;
 
+    // Spinning wheels: kept unmerged by the loader, recentred on the hub.
+    this.playerWheels.length = 0;
+    car.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.userData.wheel) {
+        this.playerWheels.push({ mesh: m, radius: m.userData.radius || 0.34 });
+      }
+    });
+
     this.player = car;
     this.wing = car.getObjectByName("active-wing");
     this.scene.add(car);
@@ -1198,6 +1208,14 @@ export class Scene3D {
       p.rotation.z = Math.max(-0.06, Math.min(0.06, s.player.rot * 0.08));
       // Subtle pitch on braking nose dive
       p.rotation.x = s.braking ? -0.025 : 0;
+      // Wheels spin with road speed and lock dead while braking (skid).
+      for (const w of this.playerWheels) {
+        w.mesh.rotation.x -= wheelOmega(s.player.speed, s.braking, w.radius) * dt;
+      }
+      if (import.meta.env.DEV && this.playerWheels.length) {
+        this.canvas.dataset["wheelRot"] = this.playerWheels[0]!.mesh.rotation.x.toFixed(3);
+        this.canvas.dataset["wheelCount"] = String(this.playerWheels.length);
+      }
       this.aero = stepAero(this.aero, s.player.speed, s.braking, dt);
       if (this.wing) {
         this.wing.position.y = 0.96 + this.aero.lift * 0.17;
