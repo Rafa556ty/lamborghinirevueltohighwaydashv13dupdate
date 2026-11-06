@@ -425,8 +425,8 @@ function batchCar(root: THREE.Group, keep?: (o: THREE.Mesh) => boolean): THREE.G
         mesh.name = `${o.name}_${center.x < 0 ? "L" : "R"}${center.z < zMid ? "F" : "R"}`;
         mesh.position.copy(center);
         mesh.castShadow = true;
-        mesh.userData.wheel = true;
-        mesh.userData.radius = Math.max(0.2, (wb.max.y - wb.min.y) / 2);
+        mesh.userData["wheel"] = true;
+        mesh.userData["radius"] = Math.max(0.2, (wb.max.y - wb.min.y) / 2);
         extras.push(mesh);
       }
       geo.dispose();
