@@ -384,6 +384,22 @@ function batchCar(root: THREE.Group, keep?: (o: THREE.Mesh) => boolean): THREE.G
     // Decode quantized positions BEFORE baking transforms: writing a world
     // position back into Int16 attributes clips the body panels and wheels.
     geo.applyMatrix4(o.matrixWorld);
+    if (keep?.(o)) {
+      // Wheels stay unmerged so the renderer can spin them around the axle:
+      // recentre the geometry on the wheel hub and spin the mesh itself.
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox!;
+      const center = bb.getCenter(new THREE.Vector3());
+      geo.translate(-center.x, -center.y, -center.z);
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.name = o.name;
+      mesh.position.copy(center);
+      mesh.castShadow = true;
+      mesh.userData.wheel = true;
+      mesh.userData.radius = Math.max(0.2, (bb.max.y - bb.min.y) / 2);
+      extras.push(mesh);
+      return;
+    }
     const expanded = geo.toNonIndexed();
     geo.dispose();
     const attributes = Object.keys(expanded.attributes).sort().join(",");
@@ -436,6 +452,7 @@ function batchCar(root: THREE.Group, keep?: (o: THREE.Mesh) => boolean): THREE.G
       }
     }
   }
+  for (const e of extras) result.add(e);
   return result.children.length ? result : root;
 }
 
@@ -485,15 +502,15 @@ export function loadCar(key: ModelKey): Promise<THREE.Group> {
             m.frustumCulled = true;
           }
         });
-        const result = batchCar(normalizeCar(scene, spec));
+        // Revuelto wheels (tyre, rim, rotor, logo) stay unmerged so they can
+        // spin; the caliper is bolted to the upright and does not turn.
+        const result = batchCar(
+          normalizeCar(scene, spec),
+          key === "revuelto"
+            ? (o) => o.name.startsWith("Wheel_") && !o.name.includes("Caliper")
+            : undefined,
+        );
         if (key === "revuelto") isolateActiveWing(result);
-        if (key === "bmw") {
-          // Stray parts hang below the tyres; sit the real tyres on the road.
-          const tyre = result.children.find((c) => c.name === "Material_362");
-          const lift = tyre ? new THREE.Box3().setFromObject(tyre).min.y : 0;
-          // Bake into geometry: traffic batches draw child geometry, not group offsets.
-          if (lift) result.traverse((o) => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.translate(0, -lift, 0));
-        }
         return result;
       });
     p.catch(() => cache.delete(key));
