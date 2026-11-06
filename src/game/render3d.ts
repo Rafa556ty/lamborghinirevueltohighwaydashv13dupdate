@@ -11,6 +11,7 @@ import { loadCar, type ModelKey } from "./models3d";
 import { FOOTPRINTS, TRAFFIC_DRAW_AHEAD } from "./traffic-rules";
 import { CAMERA_POSES, nextCameraView, type CameraView } from "./camera-views";
 import { stepAero, type AeroState } from "./aero";
+import { wheelOmega } from "./wheels";
 import { AdaptiveResolution, phoneProfile } from "./quality";
 import {
   BRIDGES,
