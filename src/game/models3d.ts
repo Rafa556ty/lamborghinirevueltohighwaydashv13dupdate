@@ -341,12 +341,13 @@ function paintBmw(root: THREE.Object3D) {
 }
 
 /** Static cars share one draw per compatible material, not one per tiny part. */
-function batchCar(root: THREE.Group): THREE.Group {
+function batchCar(root: THREE.Group, keep?: (o: THREE.Mesh) => boolean): THREE.Group {
   root.updateMatrixWorld(true);
   const groups = new Map<
     string,
     { material: THREE.Material; geometries: THREE.BufferGeometry[] }
   >();
+  const extras: THREE.Mesh[] = [];
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh) || Array.isArray(o.material)) return;
     const geo = o.geometry.clone();
