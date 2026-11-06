@@ -385,19 +385,51 @@ function batchCar(root: THREE.Group, keep?: (o: THREE.Mesh) => boolean): THREE.G
     // position back into Int16 attributes clips the body panels and wheels.
     geo.applyMatrix4(o.matrixWorld);
     if (keep?.(o)) {
-      // Wheels stay unmerged so the renderer can spin them around the axle:
-      // recentre the geometry on the wheel hub and spin the mesh itself.
+      // The Revuelto GLB bakes all four wheels into ONE mesh per part
+      // (tyre, rim, rotor, logo) centred on the car. Split each part into
+      // the four corners so every wheel spins around its own hub.
+      const pos = geo.getAttribute("position");
       geo.computeBoundingBox();
       const bb = geo.boundingBox!;
-      const center = bb.getCenter(new THREE.Vector3());
-      geo.translate(-center.x, -center.y, -center.z);
-      const mesh = new THREE.Mesh(geo, material);
-      mesh.name = o.name;
-      mesh.position.copy(center);
-      mesh.castShadow = true;
-      mesh.userData.wheel = true;
-      mesh.userData.radius = Math.max(0.2, (bb.max.y - bb.min.y) / 2);
-      extras.push(mesh);
+      const zMid = (bb.min.z + bb.max.z) / 2;
+      const index = geo.getIndex();
+      const triCount = (index ? index.count : pos.count) / 3;
+      const vi = (t: number, k: number) => (index ? index.getX(t * 3 + k) : t * 3 + k);
+      const buckets: number[][] = [[], [], [], []];
+      for (let t = 0; t < triCount; t++) {
+        const a = vi(t, 0);
+        const b = vi(t, 1);
+        const c = vi(t, 2);
+        const cx = (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3;
+        const cz = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3;
+        buckets[(cx < 0 ? 0 : 1) + (cz < zMid ? 0 : 2)]!.push(a, b, c);
+      }
+      for (const bucket of buckets) {
+        if (!bucket.length) continue;
+        const compact = new THREE.BufferGeometry();
+        for (const [name, attr] of Object.entries(geo.attributes)) {
+          const a = attr as THREE.BufferAttribute;
+          const out = new Float32Array(bucket.length * a.itemSize);
+          for (let i = 0; i < bucket.length; i++) {
+            for (let k = 0; k < a.itemSize; k++) {
+              out[i * a.itemSize + k] = a.getComponent(bucket[i]!, k);
+            }
+          }
+          compact.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize));
+        }
+        compact.computeBoundingBox();
+        const wb = compact.boundingBox!;
+        const center = wb.getCenter(new THREE.Vector3());
+        compact.translate(-center.x, -center.y, -center.z);
+        const mesh = new THREE.Mesh(compact, material);
+        mesh.name = `${o.name}_${center.x < 0 ? "L" : "R"}${center.z < zMid ? "F" : "R"}`;
+        mesh.position.copy(center);
+        mesh.castShadow = true;
+        mesh.userData.wheel = true;
+        mesh.userData.radius = Math.max(0.2, (wb.max.y - wb.min.y) / 2);
+        extras.push(mesh);
+      }
+      geo.dispose();
       return;
     }
     const expanded = geo.toNonIndexed();
