@@ -262,7 +262,7 @@ export class Scene3D {
   private hemi: THREE.HemisphereLight;
   private fog: THREE.Fog;
   private sky = new THREE.Color();
-  private daySky: THREE.CanvasTexture;
+  private daySky: THREE.Texture;
   private dayColor = new THREE.Color(0xa9cbe8);
   private duskColor = new THREE.Color(0x3a3550);
   private nightColor = new THREE.Color(0x05070d);
@@ -469,7 +469,7 @@ export class Scene3D {
         return;
       }
       this.daySky.dispose();
-      this.daySky = maps.sky as THREE.CanvasTexture;
+      this.daySky = maps.sky;
       this.reflectionMaps = maps;
       this.scene.environment = maps.day.texture;
       const road = roadTexture(maps.asphalt.image as HTMLImageElement);
