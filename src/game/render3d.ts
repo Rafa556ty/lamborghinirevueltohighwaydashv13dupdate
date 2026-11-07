@@ -3,7 +3,7 @@
 // produces every frame. Sim coordinates are pixels; `ppm` converts to metres.
 // World: player near the origin, forward = -Z, road scenery scrolls with pz.
 import * as THREE from "three";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { contactTexture, loadRoadLighting } from "./road-lighting";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { RenderSnapshot } from "./engine";
 import type { CarType } from "./traffic";
@@ -98,13 +98,18 @@ function noise(
   }
 }
 
-function roadTexture() {
-  const W = 512;
-  const H = 1024;
+function roadTexture(asphalt?: HTMLImageElement | HTMLCanvasElement) {
+  const W = 1024;
+  const H = 2048;
   return canvasTex(W, H, (g) => {
     g.fillStyle = "#3a3c40";
     g.fillRect(0, 0, W, H);
-    noise(g, W, H, 38000, ["#3d3f42", "#36383b", "#414346", "#383a3d"], [0.5, 1.5]);
+    if (asphalt) {
+      for (let y = 0; y < H; y += 256) for (let x = 0; x < W; x += 256)
+        g.drawImage(asphalt, x, y, 256, 256);
+      g.fillStyle = "rgba(10,12,15,0.22)";
+      g.fillRect(0, 0, W, H);
+    } else noise(g, W, H, 38000, ["#3d3f42", "#36383b", "#414346", "#383a3d"], [0.5, 1.5]);
     // tyre-polished lane centres
     const px = W / DECK_W;
     for (let l = 0; l < 3; l++) {
@@ -257,7 +262,7 @@ export class Scene3D {
   private hemi: THREE.HemisphereLight;
   private fog: THREE.Fog;
   private sky = new THREE.Color();
-  private daySky: THREE.CanvasTexture;
+  private daySky: THREE.Texture;
   private dayColor = new THREE.Color(0xa9cbe8);
   private duskColor = new THREE.Color(0x3a3550);
   private nightColor = new THREE.Color(0x05070d);
@@ -266,6 +271,12 @@ export class Scene3D {
   private roadTex: THREE.CanvasTexture;
   private grassTex: THREE.CanvasTexture;
   private roadMat: THREE.MeshStandardMaterial;
+  private reflectionMaps: Awaited<ReturnType<typeof loadRoadLighting>> | undefined;
+  private contactTex: THREE.CanvasTexture;
+  private roadDetail: THREE.Texture | undefined;
+  private disposed = false;
+  private lightHalos: { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; kind: "tail" | "head" | "brake" }[] = [];
+  private playerShadow: THREE.Mesh | undefined;
 
   private posts!: THREE.InstancedMesh;
   private trunks!: THREE.InstancedMesh;
@@ -342,10 +353,6 @@ export class Scene3D {
     this.renderer.shadowMap.enabled = !this.low;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
-
     this.fog = new THREE.Fog(0xa9cbe8, 60, VIEW_AHEAD - 10);
     this.scene.fog = this.fog;
     this.scene.background = this.sky;
@@ -378,7 +385,7 @@ export class Scene3D {
 
     this.hemi = new THREE.HemisphereLight(0xdfeeff, 0x3b4a2a, 0.9);
     this.scene.add(this.hemi);
-    // Garage-style warm/cool rim lights: gives the paint the studio reflections.
+    // Restrained sky fill, not bright indoor studio rim lighting.
     this.rimWarm.position.set(-6, 3, -5);
     this.rimCool.position.set(5, 2, -6);
     this.scene.add(this.rimWarm, this.rimCool);
@@ -423,6 +430,7 @@ export class Scene3D {
       [0.25, "rgba(255,200,90,0.9)"],
       [1, "rgba(255,90,0,0)"],
     ]);
+    this.contactTex = contactTexture();
 
     this.buildWorld();
 
@@ -454,6 +462,34 @@ export class Scene3D {
     }
 
     void this.loadModels();
+    void loadRoadLighting(this.renderer).then((maps) => {
+      if (this.disposed) {
+        maps.day.dispose(); maps.night.dispose(); maps.tunnel.dispose();
+        maps.sky.dispose(); maps.asphalt.dispose();
+        return;
+      }
+      this.daySky.dispose();
+      this.daySky = maps.sky;
+      this.reflectionMaps = maps;
+      this.scene.environment = maps.day.texture;
+      const road = roadTexture(maps.asphalt.image as HTMLImageElement);
+      road.repeat.set(1, STRIP_LEN / TILE_LEN);
+      this.roadMat.map = road;
+      this.roadTex.dispose();
+      this.roadTex = road;
+      // Fine aggregate data map excludes painted lines and repeats at metre scale.
+      const detail = maps.asphalt.clone();
+      detail.colorSpace = THREE.NoColorSpace;
+      detail.wrapS = detail.wrapT = THREE.RepeatWrapping;
+      detail.repeat.set(DECK_W / 3.5, STRIP_LEN / 3.5);
+      detail.anisotropy = this.low ? 4 : 8;
+      detail.needsUpdate = true;
+      this.roadDetail = detail;
+      this.roadMat.bumpMap = this.roadMat.roughnessMap = detail;
+      this.roadMat.bumpScale = 0.008;
+      this.roadMat.needsUpdate = true;
+      this.canvas.dataset["roadLightingReady"] = "true";
+    }).catch((error) => console.error("Road lighting failed", error));
   }
 
   private makeHeadlight() {
@@ -885,7 +921,21 @@ export class Scene3D {
     this.headR.target.position.set(0.9, 0, -30);
     if (!this.low) car.add(this.headL.target, this.headR.target);
     // Soft contact shadows keep the car grounded without another render pass.
-    this.addContactShadow(car, 2.1, 4.8);
+    this.playerShadow = this.addContactShadow(this.scene, 2.25, 5.0);
+    const haloMap = radialTex([[0, "rgba(255,255,255,0.5)"], [0.18, "rgba(255,255,255,0.22)"], [0.55, "rgba(255,255,255,0.06)"], [1, "rgba(255,255,255,0)"]]);
+    const halo = (x: number, y: number, z: number, kind: "tail" | "head" | "brake", size: number) => {
+      const material = new THREE.MeshBasicMaterial({ map: haloMap, color: kind === "head" ? 0xfff4e6 : 0xff0a02, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size * 0.65), material);
+      mesh.position.set(x, y, z);
+      if (kind === "head") mesh.rotation.y = Math.PI;
+      car.add(mesh);
+      this.lightHalos.push({ mesh, kind });
+    };
+    for (const x of [-0.79, 0.79]) {
+      halo(x, 0.73, 2.43, "tail", 0.72);
+      halo(x, 0.56, -2.47, "head", 0.56);
+    }
+    halo(0, 0.98, 1.67, "brake", 0.65);
 
     // High-visibility dual headlight beam projector onto the highway tarmac
     const beamTex = canvasTex(512, 1024, (g) => {
@@ -1075,6 +1125,7 @@ export class Scene3D {
     const blue = new THREE.Mesh(lamp, this.policeBlue);
     blue.position.set(0.29, roof + 0.09, 0.15);
     car.add(red, blue);
+    this.addContactShadow(car, 2.15, 4.9);
     car.visible = false;
     this.scene.add(car);
     this.policeCar = car;
@@ -1099,10 +1150,10 @@ export class Scene3D {
         .rotateX(-Math.PI / 2)
         .translate(0, 0.018, 0),
       new THREE.MeshBasicMaterial({
-        map: this.smokeTex,
+        map: this.contactTex,
         color: 0x000000,
         transparent: true,
-        opacity: 0.55,
+        opacity: 0.86,
         depthWrite: false,
       }),
       128,
@@ -1181,10 +1232,13 @@ export class Scene3D {
     this.sun.intensity = lerp(2.9, 0.04, night) * (1 - rain * 0.6) * (1 - tunnelBlend);
     this.hemi.intensity = lerp(0.95, 0.38, night) * (1 - rain * 0.2) * lerp(1, 0.65, tunnelBlend);
     this.scene.environmentIntensity = lerp(1.15, 0.18, night) * lerp(1, 0.35, tunnelBlend);
+    if (this.reflectionMaps) this.scene.environment = tunnelBlend > 0.5
+      ? this.reflectionMaps.tunnel.texture
+      : night > 0.45 ? this.reflectionMaps.night.texture : this.reflectionMaps.day.texture;
     const rimK = lerp(1, 0.3, Math.max(night, tunnelBlend));
-    this.rimWarm.intensity = 1.5 * rimK;
-    this.rimCool.intensity = 0.8 * rimK;
-    this.roadMat.roughness = lerp(0.88, 0.25, rain);
+    this.rimWarm.intensity = 0.22 * rimK;
+    this.rimCool.intensity = 0.32 * rimK;
+    this.roadMat.roughness = lerp(0.96, 0.38, rain);
     this.roadMat.color.setScalar(lerp(1, 0.55, rain));
     this.tunnelLamp.intensity = tunnel ? 28 + Math.sin(((pz % 8) / 8) * Math.PI * 2) * 10 : 0;
 
@@ -1192,6 +1246,7 @@ export class Scene3D {
     const playerX = toX(px);
     // --- scrolling ground
     this.roadTex.offset.y = (pz / TILE_LEN) % 1;
+    if (this.roadDetail) this.roadDetail.offset.y = (pz / 3.5) % 1;
     this.grassTex.offset.y = (pz / 8) % 1;
     this.layoutScenery(pz, night);
     this.placeLandmarks(pz);
@@ -1204,6 +1259,10 @@ export class Scene3D {
     if (this.player) {
       const p = this.player;
       p.position.set(playerX, 0, 0);
+      if (this.playerShadow) {
+        this.playerShadow.position.x = playerX;
+        this.playerShadow.rotation.z = s.player.rot;
+      }
       p.rotation.y = -s.player.rot;
       // Realistic suspension body roll strictly clamped (never capsizes or rolls onto its roof)
       p.rotation.z = Math.max(-0.06, Math.min(0.06, s.player.rot * 0.08));
@@ -1248,6 +1307,12 @@ export class Scene3D {
       }
       for (const m of this.playerHead) {
         m.emissiveIntensity = lights ? 3.8 : 0.6;
+      }
+      for (const { mesh, kind } of this.lightHalos) {
+        mesh.material.opacity = kind === "brake" ? (isBraking ? 0.65 : 0)
+          : kind === "tail" ? (isBraking ? 0.65 : lights ? 0.44 : 0.035)
+          : lights ? 0.35 : 0.015;
+        mesh.visible = mesh.material.opacity > 0;
       }
       if (this.roadBeamMesh) {
         this.roadBeamMesh.visible = lights;
@@ -1635,23 +1700,33 @@ export class Scene3D {
     (this.rain.geometry.attributes["position"] as THREE.BufferAttribute).needsUpdate = true;
   }
 
-  private addContactShadow(car: THREE.Group, width: number, length: number) {
+  private addContactShadow(car: THREE.Object3D, width: number, length: number) {
     const shadow = new THREE.Mesh(
       new THREE.PlaneGeometry(width, length),
       new THREE.MeshBasicMaterial({
-        map: this.smokeTex,
+        map: this.contactTex,
         color: 0x000000,
         transparent: true,
-        opacity: 0.55,
+        opacity: 0.86,
         depthWrite: false,
       }),
     );
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = 0.018;
     car.add(shadow);
+    return shadow;
   }
 
   dispose() {
+    this.disposed = true;
+    this.reflectionMaps?.day.dispose();
+    this.reflectionMaps?.night.dispose();
+    this.reflectionMaps?.tunnel.dispose();
+    this.reflectionMaps?.asphalt.dispose();
+    this.roadDetail?.dispose();
+    this.daySky.dispose();
+    this.contactTex.dispose();
+    this.roadTex.dispose();
     this.renderer.dispose();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;

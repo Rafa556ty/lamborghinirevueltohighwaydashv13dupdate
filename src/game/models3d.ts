@@ -6,6 +6,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { normalizeCar } from "./normalize-car";
 import { isolateActiveWing } from "./active-wing";
+import { blackOutBmwWindow } from "./bmw-windows";
 export { normalizeCar } from "./normalize-car";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
@@ -324,6 +325,7 @@ function paintBmw(root: THREE.Object3D) {
     if (!m.isMesh) return;
     for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
       const std = mat as THREE.MeshPhysicalMaterial;
+      if (blackOutBmwWindow(mat)) continue;
       if (mat.name === "PaletteMaterial001") {
         std.map = null;
         std.color.setHex(0xeeefec);

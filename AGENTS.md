@@ -18,3 +18,4 @@
 - Traffic vehicles are real-scale CC0 GLBs in `public/game-assets/traffic-*.glb` (textures stripped, meshopt) restyled into a few shared materials in `models3d.ts`; keeps draw calls low on phones.
 - Sports traffic (Mustang, BMW) alternates calm/push moods via pure `nextSportMood` in `traffic-rules.ts`; merging cars respect the target lane's leader so lanes never overlap.
 - Selectable camera views are pure poses in `src/game/camera-views.ts` applied by render3d; scenery and traffic render far behind the car so the reverse camera never exposes unloaded world.
+- Bake road environment reflections once in `road-lighting.ts`; use shared contact textures and local light halos rather than full-screen phone post-processing to limit rendering cost.
