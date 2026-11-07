@@ -3,7 +3,7 @@ import * as THREE from "three";
 /** Exporter name for the BMW's window shell, not its headlamp lenses. */
 export function blackOutBmwWindow(mat: THREE.Material): boolean {
   const name = mat.name.toLowerCase();
-  if (name !== "material_718" && !/window|windshield|windscreen/.test(name)) return false;
+  if (name !== "palettematerial004" && !/window|windshield|windscreen/.test(name)) return false;
   if (!(mat instanceof THREE.MeshStandardMaterial)) return false;
   mat.color.setHex(0x000000);
   mat.map = null;
