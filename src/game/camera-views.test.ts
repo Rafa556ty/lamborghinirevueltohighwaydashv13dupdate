@@ -9,7 +9,7 @@ import {
 describe("camera views", () => {
   it("cycles through every view and wraps back to the chase cam", () => {
     let v: CameraView = CAMERA_VIEWS[0];
-    const seen = [v];
+    const seen: CameraView[] = [v];
     for (let i = 0; i < CAMERA_VIEWS.length; i++) {
       v = nextCameraView(v);
       seen.push(v);
