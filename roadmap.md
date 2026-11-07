@@ -4,3 +4,9 @@
 - [x] Import racing game source and media without repository metadata or platform configuration.
 - [ ] Run the imported game tests.
 - [ ] Verify language selection, menus, garage, and driving on desktop and phone layouts.
+
+# Demo v1 graphics
+
+- [ ] Improve outdoor reflections, contact shadows, asphalt detail, and light glow without expensive phone post-processing.
+- [ ] Keep the BMW M4 and make its windows fully black and opaque.
+- [ ] Test the graphics and BMW windows in the running game on desktop and phone layouts.
