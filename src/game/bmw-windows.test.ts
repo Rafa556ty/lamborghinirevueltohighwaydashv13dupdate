@@ -13,6 +13,8 @@ it("makes the BMW window shell fully black and opaque without transmission", () 
   expect(mat.transmission).toBe(0);
   expect(mat.map).toBeNull();
   expect(mat.depthWrite).toBe(true);
+  expect(mat.envMapIntensity).toBe(0);
+  expect(mat.clearcoat).toBe(0);
 });
 
 it("does not black out the BMW white body or its headlamp lenses", () => {

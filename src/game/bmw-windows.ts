@@ -11,11 +11,12 @@ export function blackOutBmwWindow(mat: THREE.Material): boolean {
   mat.transparent = false;
   mat.opacity = 1;
   mat.depthWrite = true;
-  mat.metalness = 0.15;
-  mat.roughness = 0.12;
+  mat.metalness = 0;
+  mat.roughness = 0.8;
+  mat.envMapIntensity = 0;
   if (mat instanceof THREE.MeshPhysicalMaterial) {
     mat.transmission = 0;
-    mat.clearcoat = 1;
+    mat.clearcoat = 0;
     mat.clearcoatRoughness = 0.08;
   }
   mat.needsUpdate = true;
